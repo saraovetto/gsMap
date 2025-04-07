@@ -193,7 +193,7 @@ def add_find_latent_representations_args(parser):
         "--input_hdf5_path", required=True, type=str, help="Path to the input HDF5 file."
     )
     parser.add_argument(
-        "--annotation", required=True, type=str, help="Name of the annotation in adata.obs to use."
+        "--annotation", default=None, type=str, help="Name of the annotation in adata.obs to use."
     )
     parser.add_argument(
         "--data_layer",
