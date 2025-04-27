@@ -57,7 +57,8 @@ def load_gtf(
     gtf = gtf[gtf["Feature"] == "gene"]
 
     # Find common genes between GTF and marker scores
-    common_gene = np.intersect1d(mk_score.index, gtf.gene_name)
+    # common_gene = np.intersect1d(mk_score.index, gtf.gene_name)
+    common_gene = list(set(mk_score.index) & set(gtf.gene_name))
     logger.info(f"Found {len(common_gene)} common genes between GTF and marker scores")
 
     # Filter GTF and marker scores to common genes
@@ -69,6 +70,9 @@ def load_gtf(
 
     # Process the GTF (open window around gene coordinates)
     gtf_bed = gtf[["Chromosome", "Start", "End", "gene_name", "Strand"]].copy()
+    gtf_bed["Chromosome"] = gtf_bed["Chromosome"].apply(
+        lambda x: f"chr{x}" if not str(x).startswith("chr") else x
+    )
     gtf_bed.loc[:, "TSS"] = gtf_bed["Start"]
     gtf_bed.loc[:, "TED"] = gtf_bed["End"]
 
@@ -128,7 +132,7 @@ def load_bim(bfile_root: str, chrom: int) -> tuple[pd.DataFrame, pr.PyRanges]:
         - bim_pr is a PyRanges object with BIM data
     """
     bim_file = f"{bfile_root}.{chrom}.bim"
-    logger.debug(f"Loading BIM file: {bim_file}")
+    logger.info(f"Loading BIM file: {bim_file}")
 
     bim = pd.read_csv(bim_file, sep="\t", header=None)
     bim.columns = ["CHR", "SNP", "CM", "BP", "A1", "A2"]
@@ -310,6 +314,8 @@ def get_ldscore(
     array_snps, array_indivs, geno_array = load_bfile(
         bfile_chr_prefix=f"{bfile_root}.{chrom}", keep_snps=keep_snps_index
     )
+
+    annot_matrix = annot_matrix[geno_array.kept_snps, :]
 
     # Configure LD window based on specified unit
     if ld_unit == "SNP":
