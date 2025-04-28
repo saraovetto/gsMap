@@ -507,7 +507,7 @@ class PlinkBEDFile:
         if annot is None:
             annot = np.ones((m, 1), dtype="float32")
         else:
-            annot = annot.astype("float32")  # Ensure annot is float32
+            # annot = annot.astype("float32")  # Ensure annot is float32
             annot_m = annot.shape[0]
             if annot_m != self.m:
                 raise ValueError("Incorrect number of SNPs in annot")
@@ -558,7 +558,7 @@ class PlinkBEDFile:
                 A = A[:, b0 - b : b0]
                 l_A = b0 - b
             elif b == 0:  # no SNPs to left in window, e.g., after a sequence gap
-                A = np.array(()).reshape((n, 0))
+                A = np.array((), dtype="float32").reshape((n, 0))
                 l_A = l_B
             if l_B == md:
                 c = m - md

@@ -401,11 +401,9 @@ class LDScoreCalculator:
                 f"{missing_count} SNPs not found in additional baseline annotations. "
                 "Setting their values to 0."
             )
-            additional_baseline_df = additional_baseline_df.reindex(
-                self.snp_gene_pair_dummy.index, fill_value=0
-            )
-        else:
-            additional_baseline_df = additional_baseline_df.reindex(self.snp_gene_pair_dummy.index)
+        additional_baseline_df = additional_baseline_df.reindex(
+            self.snp_gene_pair_dummy.index, fill_value=0
+        )
 
         # Combine annotations into a single matrix
         combined_annotations = pd.concat(
@@ -414,7 +412,7 @@ class LDScoreCalculator:
 
         # Calculate LD scores
         ld_scores = plink_bed.get_ldscore(
-            annot_matrix=combined_annotations.values,
+            annot_matrix=combined_annotations.values.astype(np.float32, copy=False),
             ld_wind=self.config.ld_wind,
             ld_unit=self.config.ld_unit,
         )
