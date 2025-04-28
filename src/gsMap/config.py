@@ -972,10 +972,7 @@ class GenerateLDScoreConfig(ConfigWithAutoPaths):
     ld_wind: int = 1
     ld_unit: str = "CM"
 
-    # zarr config
-    ldscore_save_format: Literal["feather", "zarr", "quick_mode"] = "feather"
-
-    zarr_chunk_size: tuple[int, int] = None
+    ldscore_save_format: Literal["feather", "quick_mode"] = "feather"
 
     # for pre calculating the SNP Gene ldscore Weight
     save_pre_calculate_snp_gene_weight_matrix: bool = False
@@ -1059,10 +1056,6 @@ class GenerateLDScoreConfig(ConfigWithAutoPaths):
                         f"baseline.{self.chrom}.annot.gz is not found in {self.additional_baseline_annotation}."
                     )
 
-        # set the default zarr chunk size
-        if self.ldscore_save_format == "zarr" and self.zarr_chunk_size is None:
-            self.zarr_chunk_size = (10_000, self.spots_per_chunk)
-
 
 @dataclass
 class SpatialLDSCConfig(ConfigWithAutoPaths):
@@ -1079,7 +1072,7 @@ class SpatialLDSCConfig(ConfigWithAutoPaths):
     all_chunk: int | None = None
     chunk_range: tuple[int, int] | None = None
 
-    ldscore_save_format: Literal["feather", "zarr", "quick_mode"] = "feather"
+    ldscore_save_format: Literal["feather", "quick_mode"] = "feather"
 
     spots_per_chunk_quick_mode: int = 1_000
     snp_gene_weight_adata_path: str | None = None

@@ -13,7 +13,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pyranges as pr
-import zarr
 from scipy.sparse import csr_matrix
 from tqdm import trange
 
@@ -162,8 +161,6 @@ class LDScoreCalculator:
         # Initialize enhancer data if provided
         self.enhancer_pr = self._initialize_enhancer() if config.enhancer_annotation_file else None
 
-        # Initialize zarr file if needed
-        self._initialize_zarr_if_needed()
 
     def validate_config(self):
         """Validate configuration parameters."""
@@ -215,32 +212,6 @@ class LDScoreCalculator:
         # Convert to PyRanges
         return pr.PyRanges(enhancer_df.reset_index())
 
-    def _initialize_zarr_if_needed(self):
-        """Initialize zarr file if zarr format is specified."""
-        if self.config.ldscore_save_format == "zarr":
-            chrom_snp_length_dict = get_snp_counts(self.config)
-            self.chrom_snp_start_point = chrom_snp_length_dict["chrom_snp_start_point"]
-
-            zarr_path = (
-                Path(self.config.ldscore_save_dir) / f"{self.config.sample_name}.ldscore.zarr"
-            )
-
-            if not zarr_path.exists():
-                self.zarr_file = zarr.open(
-                    zarr_path.as_posix(),
-                    mode="a",
-                    dtype=np.float16,
-                    chunks=self.config.zarr_chunk_size,
-                    shape=(chrom_snp_length_dict["total"], self.mk_score_common.shape[1]),
-                )
-                zarr_path.parent.mkdir(parents=True, exist_ok=True)
-
-                # Save metadata
-                self.zarr_file.attrs["spot_names"] = self.mk_score_common.columns.to_list()
-                self.zarr_file.attrs["chrom_snp_start_point"] = self.chrom_snp_start_point
-
-            else:
-                self.zarr_file = zarr.open(zarr_path.as_posix(), mode="a")
 
     def process_chromosome(self, chrom: int):
         """
@@ -632,12 +603,6 @@ class LDScoreCalculator:
                     column_names=mk_score_chunk.columns,
                     save_file_name=ld_score_file,
                 )
-            elif self.config.ldscore_save_format == "zarr":
-                self._save_ldscore_chunk_to_zarr(
-                    ldscore_chunk,
-                    chrom=chrom,
-                    start_col_index=i,
-                )
             else:
                 raise ValueError(f"Invalid ldscore_save_format: {self.config.ldscore_save_format}")
 
@@ -719,36 +684,6 @@ class LDScoreCalculator:
         df.index.name = "SNP"
         df.reset_index().to_feather(save_file_name)
 
-    def _save_ldscore_chunk_to_zarr(
-        self, ldscore_data: np.ndarray, chrom: int, start_col_index: int
-    ):
-        """
-        Save LD scores to a zarr array.
-
-        Parameters
-        ----------
-        ldscore_data : np.ndarray
-            Array with LD scores
-        chrom : int
-            Chromosome number
-        start_col_index : int
-            Starting column index in the zarr array
-        """
-        # Convert to float16 for storage efficiency
-        ldscore_data = ldscore_data.astype(np.float16, copy=False)
-
-        # Handle numerical overflow
-        ldscore_data[np.isinf(ldscore_data)] = np.finfo(np.float16).max
-
-        # Get start and end indices for this chromosome
-        chrom_start = self.chrom_snp_start_point[chrom - 1]
-        chrom_end = self.chrom_snp_start_point[chrom]
-
-        # Save to zarr array
-        self.zarr_file[
-            chrom_start:chrom_end,
-            start_col_index : start_col_index + ldscore_data.shape[1],
-        ] = ldscore_data
 
     def _calculate_and_save_m_values(
         self,
