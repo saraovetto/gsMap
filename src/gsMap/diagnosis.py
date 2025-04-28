@@ -340,3 +340,173 @@ def run_Diagnosis(config: DiagnosisConfig):
         generate_manhattan_plot(config)
     if config.plot_type in ["GSS", "all"]:
         generate_GSS_distribution(config)
+
+                
+def generate_GSS_distribution_sara(config: DiagnosisConfig):
+    """Generate GSS distribution plots using AnnData."""
+    
+    logger.info('Loading ST data...')
+    adata = sc.read_h5ad(config.hdf5_with_latent_path)
+
+    plot_genes = (
+        config.selected_genes
+        or load_gene_diagnostic_info(config).Gene.iloc[: config.top_corr_genes].tolist()
+    )
+    
+    if config.selected_genes is not None:
+        logger.info(
+            f"Generating GSS & Expression distribution plot for selected genes: {plot_genes}..."
+        )
+    else:
+        logger.info(
+            f"Generating GSS & Expression distribution plot for top {config.top_corr_genes} correlated genes..."
+        )
+
+    if config.customize_fig:
+        pixel_width, pixel_height, point_size = (
+            config.fig_width,
+            config.fig_height,
+            config.point_size,
+        )
+    else:
+        (pixel_width, pixel_height), point_size = estimate_point_size_for_plot(
+            adata.obsm["spatial"]
+            )
+
+    sub_fig_save_dir = config.get_GSS_plot_dir(config.trait_name)
+
+    # save plot gene list
+    config.get_GSS_plot_select_gene_file(config.trait_name).write_text("\n".join(plot_genes))
+
+    for selected_gene in plot_genes:
+        generate_and_save_plots_sara(
+            adata,
+            selected_gene,
+            point_size,
+            pixel_width,
+            pixel_height,
+            sub_fig_save_dir,
+            config.sample_name,
+            config.annotation,
+        )
+
+
+import matplotlib.pyplot as plt
+def generate_and_save_plots_sara(
+    adata,
+    selected_gene,
+    point_size,
+    pixel_width,
+    pixel_height,
+    sub_fig_save_dir,
+    sample_name,
+    annotation,
+):
+    """Generate and save spatial plots using Scanpy."""
+    
+    # Expression Plot
+    fig1, ax1 = plt.subplots(figsize=(pixel_width / 100, pixel_height / 100))
+
+    sc.pl.spatial(adata, img_key="hires", color=[selected_gene], alpha=0.8, ax=ax1, show=False, title=f'{selected_gene} (Expression)', colorbar_loc=None, frameon=False)
+    fig1.colorbar(ax1.collections[0], ax=ax1, location='bottom', shrink=0.5, aspect=30, pad = 0.01, label="Expression")
+    
+    plt.savefig(sub_fig_save_dir / f"{sample_name}_{selected_gene}_Expression_Distribution.png", dpi=300, bbox_inches="tight")
+    plt.close(fig1)
+
+    # GSS Plot
+    fig2, ax2 = plt.subplots(figsize=(pixel_width / 100, pixel_height / 100))
+    sc.pl.spatial(adata, img_key="hires", color=[selected_gene], layer='GSS', alpha=0.8, ax=ax2, show=False, title=f'{selected_gene} (GSS)', colorbar_loc=None, frameon=False)
+    fig2.colorbar(ax2.collections[0], ax=ax2, location='bottom', shrink=0.5, aspect=30, pad = 0.01, label="GSS")
+    plt.savefig(sub_fig_save_dir / f"{sample_name}_{selected_gene}_GSS_Distribution.png", dpi=300, bbox_inches="tight")
+    plt.close(fig2)
+
+
+def generate_gsMap_plot_sara(config: DiagnosisConfig):
+    """Generate gsMap plot from AnnData."""
+    
+    logger.info('Loading ST data...')
+    adata = sc.read_h5ad(config.hdf5_with_latent_path)
+    
+    logger.info("Creating gsMap plot...")
+
+    trait_ldsc_result = load_ldsc(config.get_ldsc_result_file(config.trait_name))
+    space_coord_concat = load_st_coord(adata, trait_ldsc_result, annotation=config.annotation)
+
+    if config.customize_fig:
+        pixel_width, pixel_height, point_size = (
+            config.fig_width,
+            config.fig_height,
+            config.point_size,
+        )
+    else:
+        (pixel_width, pixel_height), point_size = estimate_point_size_for_plot(
+            adata.obsm["spatial"]
+        )
+    
+    ## ---- PLOTLY FIGURE ---- ##
+    fig_plotly = draw_scatter(
+        space_coord_concat,
+        title=f"{config.trait_name} (gsMap)",
+        point_size=point_size,
+        width=pixel_width,
+        height=pixel_height,
+        annotation=config.annotation,
+    )
+    
+    ## ---- SCANPY FIGURE ---- ##
+    fig, ax = plt.subplots(figsize=(pixel_width / 100, pixel_height / 100))
+    sc.pl.spatial(
+        adata, img_key="hires", color=[f"{config.trait_name}_logp"], alpha=0.7, 
+        title=f'{config.trait_name} (gsMap)', color_map='coolwarm', frameon=False, 
+        ax=ax, show=False, colorbar_loc=None)
+    
+    cbar = fig.colorbar(
+        ax.collections[0], ax=ax, location='bottom', 
+        shrink=0.6,  aspect=30, pad=0.01, label="-log10(p)")
+
+
+    output_dir = config.get_gsMap_plot_save_dir(config.trait_name)
+    output_file_html = config.get_gsMap_html_plot_save_path(config.trait_name)
+    output_file_png = output_file_html.with_suffix(".png")
+    output_file_csv = output_file_html.with_suffix(".csv")
+
+    fig.savefig(output_file_png, dpi=300, bbox_inches='tight')  
+    plt.close(fig) 
+    
+    fig_plotly.write_html(output_file_html)
+    #fig.write_image(output_file_png)
+    space_coord_concat.to_csv(output_file_csv)
+
+    logger.info(f"gsMap plot created and saved in {output_dir}.")
+
+
+def run_Diagnosis_sara(config: DiagnosisConfig):
+    """Main function to run the diagnostic plot generation."""
+    global adata
+    adata = sc.read_h5ad(config.hdf5_with_latent_path)
+    if "log1p" not in adata.uns.keys() and adata.X.max() > 14:
+        sc.pp.normalize_total(adata, target_sum=1e4)
+        sc.pp.log1p(adata)
+        
+    # add GSS info in a AnnData layer
+    mk_score = pd.read_feather(config.mkscore_feather_path).set_index("HUMAN_GENE_SYM").T
+    adata.layers["GSS"] = mk_score.to_numpy()
+        
+    # add gsMap results for the GWAS trait to anndata obs
+    trait_ldsc_result = load_ldsc(
+        config.get_ldsc_result_file(config.trait_name), 
+        columns=['spot', 'beta', 'se', 'z', 'p']
+        )
+    for col in trait_ldsc_result.columns: # add each column to adata.obs
+        adata.obs[f'{config.trait_name}_{col}'] = trait_ldsc_result[col].values
+        
+    # store modified anndata
+    adata.write(config.hdf5_with_latent_path)
+            
+
+    if config.plot_type in ["gsMap", "all"]:
+        generate_gsMap_plot_sara(config)
+    if config.plot_type in ["manhattan", "all"]:
+        generate_manhattan_plot(config)
+    if config.plot_type in ["GSS", "all"]:
+        generate_GSS_distribution_sara(config)
