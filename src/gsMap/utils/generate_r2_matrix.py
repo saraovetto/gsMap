@@ -15,7 +15,7 @@ from tqdm import tqdm
 import pyranges as pr
 
 # Configure logger
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("plink_ldscore_tool")
 
 def getBlockLefts(coords, max_dist):
     """
