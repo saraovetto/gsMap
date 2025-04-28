@@ -315,7 +315,7 @@ def get_ldscore(
         bfile_chr_prefix=f"{bfile_root}.{chrom}", keep_snps=keep_snps_index
     )
 
-    annot_matrix = annot_matrix[geno_array.kept_snps, :]
+    # annot_matrix = annot_matrix[geno_array.kept_snps, :]
 
     # Configure LD window based on specified unit
     if ld_unit == "SNP":
