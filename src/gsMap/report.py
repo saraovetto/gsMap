@@ -8,7 +8,7 @@ from jinja2 import Environment, FileSystemLoader
 import gsMap
 from gsMap.cauchy_combination_test import run_Cauchy_combination
 from gsMap.config import CauchyCombinationConfig, ReportConfig
-from gsMap.diagnosis import run_Diagnosis
+from gsMap.diagnosis import run_Diagnosis_sara
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ def check_and_run_cauchy_combination(config):
 
 def run_report(config: ReportConfig, run_parameters=None):
     logger.info("Running gsMap Diagnosis Module")
-    run_Diagnosis(config)
+    run_Diagnosis_sara(config)
     logger.info("gsMap Diagnosis running successfully")
 
     report_dir = config.get_report_dir(config.trait_name)
@@ -129,6 +129,9 @@ def run_report(config: ReportConfig, run_parameters=None):
     genetic_mapping_plot = embed_html_content(
         config.get_gsMap_html_plot_save_path(config.trait_name)
     )
+    
+    gsMap_plot_path = config.get_gsMap_html_plot_save_path(config.trait_name)
+    scanpy_plot = gsMap_plot_path.with_suffix(".png").relative_to(report_dir)
     manhattan_plot = embed_html_content(config.get_manhattan_html_plot_path(config.trait_name))
 
     gsmap_version = gsMap.__version__
@@ -154,7 +157,8 @@ def run_report(config: ReportConfig, run_parameters=None):
 
     output_html = template.render(
         title=title,
-        genetic_mapping_plot=genetic_mapping_plot,  # Inlined genetic mapping plot
+        genetic_mapping_plot=genetic_mapping_plot,  # Inlined genetic mapping plot (plotly)
+        scanpy_plot=scanpy_plot,  # Inlined Scanpy plot
         manhattan_plot=manhattan_plot,  # Inlined Manhattan plot
         cauchy_table=cauchy_table,
         gene_plots=gene_plots,  # List of PNG paths for gene plots
