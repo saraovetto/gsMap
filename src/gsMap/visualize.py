@@ -10,13 +10,13 @@ from scipy.spatial import KDTree
 from gsMap.config import VisualizeConfig
 
 
-def load_ldsc(ldsc_input_file):
+def load_ldsc(ldsc_input_file, columns=["spot", "p"]):
     ldsc = pd.read_csv(
         ldsc_input_file,
         compression="gzip",
         dtype={"spot": str, "p": float},
         index_col="spot",
-        usecols=["spot", "p"],
+        usecols=columns, #usecols=["spot", "p"],
     )
     ldsc["logp"] = -np.log10(ldsc.p)
     return ldsc
@@ -160,7 +160,7 @@ def draw_scatter(
     # Adjust margins to ensure no clipping and equal axis ratio
     fig.update_layout(
         margin=dict(l=0, r=0, t=20, b=10),  # Adjust margins to prevent clipping
-        height=width,  # Ensure the figure height matches the width for equal axis ratio
+        #height=width,  # Ensure the figure height matches the width for equal axis ratio
     )
 
     # Adjust the title location and font size
