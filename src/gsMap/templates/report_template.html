@@ -54,8 +54,24 @@
         <div class="plot-container">
             <h2>Genetic Spatial Mapping Plot</h2>
             <p class="section-description">This plot shows the spatial genetic mapping results across different tissues.</p>
-            <div class="border rounded p-3">
-                {{ genetic_mapping_plot|safe }}
+            
+            <!-- Bootstrap row to display the HTML and PNG plots side by side -->
+            <div class="row">
+                <!-- HTML Plot (gsMap Plot) -->
+                <div class="col-md-6 mb-4">
+                    <h5>gsMap Plot (HTML)</h5>
+                    <div class="border rounded p-3">
+                        {{ genetic_mapping_plot|safe }}
+                    </div>
+                </div>
+
+                <!-- PNG Plot (Scanpy Plot) -->
+                <div class="col-md-6 mb-4">
+                    <h5>Scanpy Plot </h5>
+                    <div class="border rounded p-3">
+                        <img src="{{ scanpy_plot }}" alt="Scanpy Plot" class="img-fluid">
+                    </div>
+                </div>
             </div>
         </div>
 
