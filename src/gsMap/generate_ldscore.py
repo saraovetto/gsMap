@@ -18,7 +18,7 @@ from scipy.sparse import csr_matrix
 from tqdm import trange
 
 from gsMap.config import GenerateLDScoreConfig
-from gsMap.utils.generate_r2_matrix import getBlockLefts, load_bfile
+from gsMap.utils.generate_r2_matrix import getBlockLefts, load_bfile, initialize_bed_file
 
 # Configure warning behavior more precisely
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
@@ -245,16 +245,15 @@ def get_snp_counts(config: GenerateLDScoreConfig) -> dict:
     return snp_counts
 
 
-def get_snp_pass_maf(bfile_root: str, chrom: int, maf_min: float = 0.05) -> list[str]:
+def get_snp_pass_maf(plink_bed, maf_min: float = 0.05) -> list[str]:
     """
-    Get SNPs that pass the minimum minor allele frequency (MAF) threshold.
+    Get SNPs that pass the minimum minor allele frequency (MAF) threshold,
+    using pre-calculated MAF values.
 
     Parameters
     ----------
-    bfile_root : str
-        Root path for PLINK bfiles
-    chrom : int
-        Chromosome number
+    plink_bed : PlinkBEDFile
+        Initialized PlinkBEDFile object
     maf_min : float, optional
         Minimum MAF threshold, by default 0.05
 
@@ -263,26 +262,14 @@ def get_snp_pass_maf(bfile_root: str, chrom: int, maf_min: float = 0.05) -> list
     list
         List of SNP IDs that pass the MAF threshold
     """
-    array_snps, array_indivs, geno_array = load_bfile(
-        bfile_chr_prefix=f"{bfile_root}.{chrom}", mafMin=maf_min
-    )
+    # Use the specialized method to get SNPs by MAF threshold
+    snp_pass_maf = plink_bed.get_snps_by_maf(maf_min)
+    logger.info(f"SNPs with MAF > {maf_min}: {len(snp_pass_maf)}")
 
-    m = len(array_snps.IDList)
-    n = len(array_indivs.IDList)
-    logger.info(
-        f"Loading genotype data for {m} SNPs and {n} individuals from {bfile_root}.{chrom}"
-    )
-
-    # Filter SNPs by MAF
-    snp_pass_maf = array_snps.IDList.iloc[geno_array.kept_snps]
-    logger.info(f"After filtering SNPs with MAF < {maf_min}, {len(snp_pass_maf)} SNPs remain")
-
-    return snp_pass_maf.SNP.to_list()
-
+    return snp_pass_maf
 
 def get_ldscore(
-    bfile_root: str,
-    chrom: int,
+    plink_bed,
     annot_matrix: np.ndarray,
     ld_wind: float,
     ld_unit: str = "CM",
@@ -293,10 +280,8 @@ def get_ldscore(
 
     Parameters
     ----------
-    bfile_root : str
-        Root path for PLINK bfiles
-    chrom : int
-        Chromosome number
+    plink_bed : PlinkBEDFile
+        Initialized PlinkBEDFile object
     annot_matrix : np.ndarray
         Annotation matrix
     ld_wind : float
@@ -311,29 +296,26 @@ def get_ldscore(
     pd.DataFrame
         DataFrame with calculated LD scores
     """
-    array_snps, array_indivs, geno_array = load_bfile(
-        bfile_chr_prefix=f"{bfile_root}.{chrom}", keep_snps=keep_snps_index
-    )
-
-    # annot_matrix = annot_matrix[geno_array.kept_snps, :]
+    # Apply filters to the existing BED file
+    plink_bed.apply_filters(keep_snps=keep_snps_index)
 
     # Configure LD window based on specified unit
     if ld_unit == "SNP":
         max_dist = ld_wind
-        coords = np.array(range(geno_array.m))
+        coords = np.array(range(plink_bed.m))
     elif ld_unit == "KB":
         max_dist = ld_wind * 1000
-        coords = np.array(array_snps.df["BP"])[geno_array.kept_snps]
+        coords = np.array(plink_bed.df[:, 2])  # BP column
     elif ld_unit == "CM":
         max_dist = ld_wind
-        coords = np.array(array_snps.df["CM"])[geno_array.kept_snps]
+        coords = np.array(plink_bed.df[:, 3])  # CM column
         # Check if the CM is all 0
         if np.all(coords == 0):
             logger.warning(
                 "All CM values are 0 in the BIM file. Using 1MB window size for LD score calculation."
             )
             max_dist = 1_000_000
-            coords = np.array(array_snps.df["BP"])[geno_array.kept_snps]
+            coords = np.array(plink_bed.df[:, 2])  # BP column
     else:
         raise ValueError(f"Invalid ld_wind_unit: {ld_unit}. Must be one of: SNP, KB, CM")
 
@@ -342,15 +324,14 @@ def get_ldscore(
     assert block_left.sum() > 0, "Invalid window size, please check the ld_wind parameter."
 
     # Calculate LD scores
-    ld_scores = pd.DataFrame(geno_array.ldScoreVarBlocks(block_left, 100, annot=annot_matrix))
+    ld_scores = pd.DataFrame(plink_bed.ldScoreVarBlocks(block_left, 100, annot=annot_matrix))
 
     return ld_scores
 
 
 def calculate_ldscore_from_annotation(
     snp_annotation_df: pd.DataFrame,
-    chrom: int,
-    bfile_root: str,
+    plink_bed,
     ld_wind: float = 1,
     ld_unit: str = "CM",
 ) -> pd.DataFrame:
@@ -361,10 +342,8 @@ def calculate_ldscore_from_annotation(
     ----------
     snp_annotation_df : pd.DataFrame
         DataFrame with SNP annotations
-    chrom : int
-        Chromosome number
-    bfile_root : str
-        Root path for PLINK bfiles
+    plink_bed : PlinkBEDFile
+        Initialized PlinkBEDFile object
     ld_wind : float, optional
         LD window size, by default 1
     ld_unit : str, optional
@@ -377,7 +356,7 @@ def calculate_ldscore_from_annotation(
     """
     # Calculate LD scores
     snp_gene_weight_matrix = get_ldscore(
-        bfile_root, chrom, snp_annotation_df.values, ld_wind=ld_wind, ld_unit=ld_unit
+        plink_bed, snp_annotation_df.values, ld_wind=ld_wind, ld_unit=ld_unit
     )
 
     # Set proper data types and indices
@@ -390,8 +369,7 @@ def calculate_ldscore_from_annotation(
 
 def calculate_ldscore_from_multiple_annotation(
     snp_annotation_df_list: list[pd.DataFrame],
-    chrom: int,
-    bfile_root: str,
+    plink_bed,
     ld_wind: float = 1,
     ld_unit: str = "CM",
 ) -> list[pd.DataFrame]:
@@ -402,10 +380,8 @@ def calculate_ldscore_from_multiple_annotation(
     ----------
     snp_annotation_df_list : list
         List of DataFrames with SNP annotations
-    chrom : int
-        Chromosome number
-    bfile_root : str
-        Root path for PLINK bfiles
+    plink_bed : PlinkBEDFile
+        Initialized PlinkBEDFile object
     ld_wind : float, optional
         LD window size, by default 1
     ld_unit : str, optional
@@ -421,7 +397,7 @@ def calculate_ldscore_from_multiple_annotation(
 
     # Calculate LD scores
     combined_ld_scores = get_ldscore(
-        bfile_root, chrom, combined_annotations.values, ld_wind=ld_wind, ld_unit=ld_unit
+        plink_bed, combined_annotations.values, ld_wind=ld_wind, ld_unit=ld_unit
     )
 
     # Apply proper indices and columns
@@ -444,20 +420,10 @@ def calculate_ldscore_from_multiple_annotation(
 class LDScoreCalculator:
     """
     Class for calculating LD scores from gene specificity scores.
-
-    This class handles the assignment of gene specificity scores to SNPs
-    and the calculation of LD scores.
     """
 
     def __init__(self, config: GenerateLDScoreConfig):
-        """
-        Initialize LDScoreCalculator.
-
-        Parameters
-        ----------
-        config : GenerateLDScoreConfig
-            Configuration object
-        """
+        """Initialize LDScoreCalculator."""
         self.config = config
         self.validate_config()
 
@@ -554,7 +520,7 @@ class LDScoreCalculator:
 
     def process_chromosome(self, chrom: int):
         """
-        Process a single chromosome to calculate LD scores.
+        Process a single chromosome to calculate LD scores using the improved PlinkBEDFile class.
 
         Parameters
         ----------
@@ -563,8 +529,14 @@ class LDScoreCalculator:
         """
         logger.info(f"Processing chromosome {chrom}")
 
-        # Get SNPs passing MAF filter
-        self.snp_pass_maf = get_snp_pass_maf(self.config.bfile_root, chrom, maf_min=0.05)
+        # Initialize PlinkBEDFile once for this chromosome
+        # This now pre-calculates MAF for all SNPs during initialization
+        plink_bed, array_snps, array_indivs = initialize_bed_file(f"{self.config.bfile_root}.{chrom}")
+        logger.info(
+            f"Loaded genotype data for chromosome {chrom} with {plink_bed.m} SNPs and {plink_bed.n} individuals")
+
+        # Get SNPs passing MAF filter using pre-calculated values (no need to apply filters)
+        self.snp_pass_maf = get_snp_pass_maf(plink_bed, maf_min=0.05)
 
         # Get SNP-gene dummy pairs
         self.snp_gene_pair_dummy = self._get_snp_gene_dummy(chrom)
@@ -574,13 +546,12 @@ class LDScoreCalculator:
 
         # Process additional baseline annotations if provided
         if self.config.additional_baseline_annotation:
-            self._process_additional_baseline(chrom)
+            self._process_additional_baseline(chrom, plink_bed)
         else:
             # Calculate SNP-gene weight matrix
             self.snp_gene_weight_matrix = calculate_ldscore_from_annotation(
                 self.snp_gene_pair_dummy,
-                chrom,
-                self.config.bfile_root,
+                plink_bed,
                 ld_wind=self.config.ld_wind,
                 ld_unit=self.config.ld_unit,
             )
@@ -591,7 +562,7 @@ class LDScoreCalculator:
 
         # Generate w_ld file if keep_snp_root is provided
         if self.config.keep_snp_root:
-            self._generate_w_ld(chrom)
+            self._generate_w_ld(chrom, plink_bed)
 
         # Save pre-calculated SNP-gene weight matrix if requested
         self._save_snp_gene_weight_matrix_if_needed(chrom)
@@ -602,16 +573,16 @@ class LDScoreCalculator:
 
         # Calculate baseline LD scores
         logger.info(f"Calculating baseline LD scores for chr{chrom}")
-        self._calculate_baseline_ldscores(chrom)
+        self._calculate_baseline_ldscores(chrom, plink_bed)
 
         # Calculate LD scores for annotation
         logger.info(f"Calculating annotation LD scores for chr{chrom}")
-        self._calculate_annotation_ldscores(chrom)
+        self._calculate_annotation_ldscores(chrom, plink_bed)
 
         # Clear memory
         self._clear_memory()
 
-    def _generate_w_ld(self, chrom: int):
+    def _generate_w_ld(self, chrom: int, plink_bed):
         """
         Generate w_ld file for the chromosome using filtered SNPs.
 
@@ -619,11 +590,11 @@ class LDScoreCalculator:
         ----------
         chrom : int
             Chromosome number
+        plink_bed : PlinkBEDFile
+            Initialized PlinkBEDFile object
         """
         if not self.config.keep_snp_root:
-            logger.info(
-                f"Skipping w_ld generation for chr{chrom} as keep_snp_root is not provided"
-            )
+            logger.info(f"Skipping w_ld generation for chr{chrom} as keep_snp_root is not provided")
             return
 
         logger.info(f"Generating w_ld for chr{chrom}")
@@ -636,8 +607,7 @@ class LDScoreCalculator:
 
         # Calculate LD scores using the filtered SNPs
         w_ld_scores = get_ldscore(
-            self.config.bfile_root,
-            chrom,
+            plink_bed,
             unit_annotation,
             ld_wind=self.config.ld_wind,
             ld_unit=self.config.ld_unit,
@@ -669,7 +639,7 @@ class LDScoreCalculator:
         # Reorder columns
         w_ld_df = w_ld_df[["CHR", "SNP", "BP", "CM", "L2"]]
 
-        # Save to feather format
+        # Save to file
         w_ld_dir = Path(self.config.ldscore_save_dir) / "w_ld"
         w_ld_dir.mkdir(parents=True, exist_ok=True)
         w_ld_file = w_ld_dir / f"weights.{chrom}.l2.ldscore.gz"
@@ -699,7 +669,7 @@ class LDScoreCalculator:
             logger.info(f"Using all {len(self.snp_name)} SNPs (no filter applied)")
             logger.warning("No keep_snp_root provided, all SNPs will be used to calculate w_ld.")
 
-    def _process_additional_baseline(self, chrom: int):
+    def _process_additional_baseline(self, chrom: int, plink_bed):
         """
         Process additional baseline annotations.
 
@@ -707,6 +677,8 @@ class LDScoreCalculator:
         ----------
         chrom : int
             Chromosome number
+        plink_bed : PlinkBEDFile
+            Initialized PlinkBEDFile object
         """
         # Load additional baseline annotations
         additional_baseline_path = Path(self.config.additional_baseline_annotation)
@@ -714,9 +686,7 @@ class LDScoreCalculator:
 
         # Verify file existence
         if not annot_file_path.exists():
-            raise FileNotFoundError(
-                f"Additional baseline annotation file not found: {annot_file_path}"
-            )
+            raise FileNotFoundError(f"Additional baseline annotation file not found: {annot_file_path}")
 
         # Load annotations
         additional_baseline_df = pd.read_csv(annot_file_path, sep="\t")
@@ -743,14 +713,11 @@ class LDScoreCalculator:
             additional_baseline_df = additional_baseline_df.reindex(self.snp_gene_pair_dummy.index)
 
         # Calculate LD scores for both annotation sets together
-        self.snp_gene_weight_matrix, additional_ldscore = (
-            calculate_ldscore_from_multiple_annotation(
-                [self.snp_gene_pair_dummy, additional_baseline_df],
-                chrom,
-                self.config.bfile_root,
-                ld_wind=self.config.ld_wind,
-                ld_unit=self.config.ld_unit,
-            )
+        self.snp_gene_weight_matrix, additional_ldscore = calculate_ldscore_from_multiple_annotation(
+            [self.snp_gene_pair_dummy, additional_baseline_df],
+            plink_bed,
+            ld_wind=self.config.ld_wind,
+            ld_unit=self.config.ld_unit,
         )
 
         # Filter additional ldscore
@@ -759,9 +726,7 @@ class LDScoreCalculator:
         # Save additional baseline LD scores
         ld_score_file = f"{self.config.ldscore_save_dir}/additional_baseline/baseline.{chrom}.l2.ldscore.feather"
         m_file_path = f"{self.config.ldscore_save_dir}/additional_baseline/baseline.{chrom}.l2.M"
-        m_5_file_path = (
-            f"{self.config.ldscore_save_dir}/additional_baseline/baseline.{chrom}.l2.M_5_50"
-        )
+        m_5_file_path = f"{self.config.ldscore_save_dir}/additional_baseline/baseline.{chrom}.l2.M_5_50"
         Path(m_file_path).parent.mkdir(parents=True, exist_ok=True)
 
         # Save LD scores
@@ -799,7 +764,7 @@ class LDScoreCalculator:
             save_path = save_dir / f"{chrom}.snp_gene_weight_matrix.feather"
             self.snp_gene_weight_matrix.reset_index().to_feather(save_path)
 
-    def _calculate_baseline_ldscores(self, chrom: int):
+    def _calculate_baseline_ldscores(self, chrom: int, plink_bed):
         """
         Calculate and save baseline LD scores.
 
@@ -807,6 +772,8 @@ class LDScoreCalculator:
         ----------
         chrom : int
             Chromosome number
+        plink_bed : PlinkBEDFile
+            Initialized PlinkBEDFile object
         """
         # Create baseline scores
         baseline_mk_score = np.ones((self.snp_gene_pair_dummy.shape[1], 2))
@@ -817,14 +784,12 @@ class LDScoreCalculator:
         )
 
         # Define file paths
-        ld_score_file = (
-            f"{self.config.ldscore_save_dir}/baseline/baseline.{chrom}.l2.ldscore.feather"
-        )
+        ld_score_file = f"{self.config.ldscore_save_dir}/baseline/baseline.{chrom}.l2.ldscore.feather"
         m_file = f"{self.config.ldscore_save_dir}/baseline/baseline.{chrom}.l2.M"
         m_5_file = f"{self.config.ldscore_save_dir}/baseline/baseline.{chrom}.l2.M_5_50"
 
         # Calculate LD scores
-        ldscore_chunk = self._calculate_ldscore_from_weights(baseline_df, drop_dummy_na=False)
+        ldscore_chunk = self._calculate_ldscore_from_weights(baseline_df, plink_bed, drop_dummy_na=False)
 
         # Save LD scores and M values
         self._save_ldscore_to_feather(
@@ -891,7 +856,7 @@ class LDScoreCalculator:
 
         logger.info(f"Saved w_ld for chr{chrom} to {w_ld_file}")
 
-    def _calculate_annotation_ldscores(self, chrom: int):
+    def _calculate_annotation_ldscores(self, chrom: int, plink_bed):
         """
         Calculate and save LD scores for spatial annotations.
 
@@ -899,6 +864,8 @@ class LDScoreCalculator:
         ----------
         chrom : int
             Chromosome number
+        plink_bed : PlinkBEDFile
+            Initialized PlinkBEDFile object
         """
         # Get marker scores for gene columns (excluding dummy NA column)
         mk_scores = self.mk_score_common.loc[self.snp_gene_pair_dummy.columns[:-1]]
@@ -906,13 +873,13 @@ class LDScoreCalculator:
         # Process in chunks
         chunk_index = 1
         for i in trange(
-            0,
-            mk_scores.shape[1],
-            self.config.spots_per_chunk,
-            desc=f"Calculating LD scores for chr{chrom}",
+                0,
+                mk_scores.shape[1],
+                self.config.spots_per_chunk,
+                desc=f"Calculating LD scores for chr{chrom}",
         ):
             # Get marker scores for current chunk
-            mk_score_chunk = mk_scores.iloc[:, i : i + self.config.spots_per_chunk]
+            mk_score_chunk = mk_scores.iloc[:, i: i + self.config.spots_per_chunk]
 
             # Define file paths
             sample_name = self.config.sample_name
@@ -921,7 +888,7 @@ class LDScoreCalculator:
             m_5_file = f"{self.config.ldscore_save_dir}/{sample_name}_chunk{chunk_index}/{sample_name}.{chrom}.l2.M_5_50"
 
             # Calculate LD scores
-            ldscore_chunk = self._calculate_ldscore_from_weights(mk_score_chunk)
+            ldscore_chunk = self._calculate_ldscore_from_weights(mk_score_chunk, plink_bed)
 
             # Save LD scores based on format
             if self.config.ldscore_save_format == "feather":
@@ -954,7 +921,7 @@ class LDScoreCalculator:
             gc.collect()
 
     def _calculate_ldscore_from_weights(
-        self, marker_scores: pd.DataFrame, drop_dummy_na: bool = True
+            self, marker_scores: pd.DataFrame, plink_bed, drop_dummy_na: bool = True
     ) -> np.ndarray:
         """
         Calculate LD scores using SNP-gene weight matrix.
@@ -963,6 +930,8 @@ class LDScoreCalculator:
         ----------
         marker_scores : pd.DataFrame
             DataFrame with marker scores
+        plink_bed : PlinkBEDFile
+            Initialized PlinkBEDFile object
         drop_dummy_na : bool, optional
             Whether to drop the dummy NA column, by default True
 
