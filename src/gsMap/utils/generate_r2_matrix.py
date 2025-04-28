@@ -1,3 +1,11 @@
+"""
+Module for reading and processing PLINK genotype data and calculating LD scores.
+
+Note:
+This code is adapted and modified from:
+https://github.com/bulik/ldsc/blob/master/ldsc/ldscore.py
+"""
+
 import logging
 
 import bitarray as ba
@@ -5,6 +13,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import pyranges as pr
+
+# Configure logger
 logger = logging.getLogger(__name__)
 
 def getBlockLefts(coords, max_dist):
@@ -76,10 +86,10 @@ class PlinkBEDFile:
         # Pre-calculate MAF for all SNPs
         self.all_snp_info = self._calculate_all_snp_info()
 
-        # Filter out invalid SNPs immediately
+        # Filter out invalid SNPs
         valid_mask = self.all_snp_info['valid_snp']
         if num_invalid := np.sum(~valid_mask):
-            print(f"Filtering out {num_invalid} bad quality SNPs")
+            logger.warning(f"Filtering out {num_invalid} bad quality SNPs")
 
         # Only keep valid SNPs
         self.kept_snps = np.arange(self.m_original)[valid_mask]
@@ -249,9 +259,6 @@ class PlinkBEDFile:
             snp_info['het_miss_count'][j] = het_miss_ct
             snp_info['valid_snp'][j] = (het_miss_ct < n)  # Basic validity check
 
-        # warning if not all SNPs are valid
-        if num_invalid := np.sum(~snp_info['valid_snp']):
-            print(f"Warning: {num_invalid} SNPs are bad quality SNPs and will be removed")
 
         return snp_info
 
@@ -288,7 +295,7 @@ class PlinkBEDFile:
             maf_values = np.minimum(self.all_snp_info['freq'], 1 - self.all_snp_info['freq'])
             maf_mask = (maf_values > mafMin) & self.all_snp_info['valid_snp']
             kept_snps = kept_snps[maf_mask]
-            print(f"After MAF filtering (>{mafMin}), {len(kept_snps)} SNPs remain")
+            logger.info(f"After MAF filtering (>{mafMin}), {len(kept_snps)} SNPs remain")
 
         # Apply SNP filter if specified
         if keep_snps is not None:
@@ -298,7 +305,7 @@ class PlinkBEDFile:
 
             # Intersect with current kept_snps
             kept_snps = np.intersect1d(kept_snps, keep_snps)
-            print(f"After keep_snps filtering, {len(kept_snps)} SNPs remain")
+            logger.info(f"After keep_snps filtering, {len(kept_snps)} SNPs remain")
 
         # Filter SNPs in the genotype data
         if len(kept_snps) < self.m_original:
@@ -320,7 +327,7 @@ class PlinkBEDFile:
             )
 
             if self.n > 0:
-                print(f"After filtering, {self.n} individuals remain")
+                logger.info(f"After filtering, {self.n} individuals remain")
             else:
                 raise ValueError("After filtering, no individuals remain")
 
@@ -408,7 +415,7 @@ class PlinkBEDFile:
             coords = np.array(self.bim_df.loc[self.kept_snps, 'CM'])
             # Check if the CM is all 0
             if np.all(coords == 0):
-                print("Warning: All CM values are 0. Using 1MB window size for LD score calculation.")
+                logger.warning("All CM values are 0. Using 1MB window size for LD score calculation.")
                 max_dist = 1_000_000
                 coords = np.array(self.bim_df.loc[self.kept_snps, 'BP'])
         else:
