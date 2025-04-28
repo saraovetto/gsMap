@@ -4,49 +4,6 @@ import pandas as pd
 from tqdm import tqdm
 
 
-def ID_List_Factory(colnames, keepcol, fname_end, header=None, usecols=None):
-    """
-    Factory function to create an IDContainer class for reading and storing data.
-    """
-
-    class IDContainer:
-        """
-        A class to read data from a file and store it as a DataFrame.
-        """
-
-        def __init__(self, fname):
-            """
-            Initialize the IDContainer with the given filename and reading options.
-            """
-            self.usecols = usecols
-            self.colnames = colnames
-            self.keepcol = keepcol
-            self.fname_end = fname_end
-            self.header = header
-            self.read(fname)
-            self.n = len(self.df)
-
-        def read(self, fname):
-            """
-            Read data from the given file and store it as a DataFrame.
-            """
-            end = self.fname_end
-            if end and not fname.endswith(end):
-                raise ValueError(f"{end} filename must end in {end}")
-            self.df = pd.read_csv(
-                fname,
-                header=self.header,
-                usecols=self.usecols,
-                sep=r"\s+",
-            )
-            if self.colnames:
-                self.df.columns = self.colnames
-            if self.keepcol is not None:
-                self.IDList = self.df.iloc[:, [self.keepcol]].astype("object")
-
-    return IDContainer
-
-
 def getBlockLefts(coords, max_dist):
     """
     Converts coordinates + max block length to a list of coordinates of the leftmost
@@ -83,18 +40,14 @@ class PlinkBEDFile:
     Interface for Plink .bed format for reading and processing genotype data.
     """
 
-    def __init__(self, fname, n, snp_list):
+    def __init__(self, bfile_prefix):
         """
-        Initialize the PlinkBEDFile with the given parameters, pre-calculating MAF for all SNPs.
+        Initialize the PlinkBEDFile from a PLINK file prefix.
 
         Parameters
         ----------
-        fname : str
-            Path to the .bed file.
-        n : int
-            Number of individuals.
-        snp_list : object
-            Object containing SNP information.
+        bfile_prefix : str
+            PLINK file prefix (without .bed/.bim/.fam extension)
         """
         # Initialize bitarray for bed code mapping
         self._bedcode = {
@@ -104,23 +57,25 @@ class PlinkBEDFile:
             0: ba.bitarray("00"),
         }
 
-        # Store original data
-        self.m_original = len(snp_list.IDList)
-        self.n_original = n
-        self.snp_list = snp_list
-        self.df_original = np.array(snp_list.df[["CHR", "SNP", "BP", "CM"]])
-        self.colnames = ["CHR", "SNP", "BP", "CM"]
+        # Load BIM file
+        self.bim_df = self.load_bim(f"{bfile_prefix}.bim")
+
+        # Load FAM file
+        self.fam_df = self.load_fam(f"{bfile_prefix}.fam")
+
+        # Set up initial parameters
+        self.m_original = len(self.bim_df)
+        self.n_original = len(self.fam_df)
 
         # Read the bed file
-        (self.nru_original, self.geno_original) = self._read(fname, self.m_original, n)
+        (self.nru_original, self.geno_original) = self._read(f"{bfile_prefix}.bed", self.m_original, self.n_original)
 
         # Initialize current state variables
         self._currentSNP = 0
         self.m = self.m_original
         self.n = self.n_original
         self.nru = self.nru_original
-        self.geno = self.geno_original
-        self.df = self.df_original
+        self.geno = self.geno_original.copy()
 
         # Pre-calculate MAF for all SNPs
         self.all_snp_info = self._calculate_all_snp_info()
@@ -131,9 +86,55 @@ class PlinkBEDFile:
         self.maf = np.minimum(self.freq, 1 - self.freq)
         self.sqrtpq = np.sqrt(self.freq * (1 - self.freq))
 
-        # Update dataframe with MAF
-        self.df = np.c_[self.df, self.maf]
-        self.colnames = ["CHR", "SNP", "BP", "CM", "MAF"]
+        # Add MAF to the BIM dataframe
+        self.bim_df['MAF'] = self.maf
+
+    @staticmethod
+    def load_bim(bim_file):
+        """
+        Load a BIM file into a pandas DataFrame.
+
+        Parameters
+        ----------
+        bim_file : str
+            Path to the BIM file
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame containing BIM data
+        """
+        df = pd.read_csv(
+            bim_file,
+            sep="\t",
+            header=None,
+            names=["CHR", "SNP", "CM", "BP", "A1", "A2"]
+        )
+        return df
+
+    @staticmethod
+    def load_fam(fam_file):
+        """
+        Load a FAM file into a pandas DataFrame.
+
+        Parameters
+        ----------
+        fam_file : str
+            Path to the FAM file
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame containing FAM data
+        """
+        df = pd.read_csv(
+            fam_file,
+            sep=r"\s+",
+            header=None,
+            usecols=[1],
+            names=["IID"]
+        )
+        return df
 
     def _read(self, fname, m, n):
         """
@@ -210,6 +211,10 @@ class PlinkBEDFile:
             snp_info['het_miss_count'][j] = het_miss_ct
             snp_info['valid_snp'][j] = (het_miss_ct < n)  # Basic validity check
 
+        # warning if not all SNPs are valid
+        if num_invalid := np.sum(~snp_info['valid_snp']):
+            print(f"Warning: {num_invalid} SNPs are bad quality SNPs and will be removed")
+
         return snp_info
 
     def apply_filters(self, keep_snps=None, keep_indivs=None, mafMin=None):
@@ -235,7 +240,6 @@ class PlinkBEDFile:
         self.m = self.m_original
         self.n = self.n_original
         self.nru = self.nru_original
-        self.df = self.df_original.copy()
         self._currentSNP = 0
 
         # Initialize with all SNPs
@@ -288,11 +292,6 @@ class PlinkBEDFile:
         self.maf = np.minimum(self.freq, 1 - self.freq)
         self.sqrtpq = np.sqrt(self.freq * (1 - self.freq))
 
-        # Update dataframe with kept SNPs
-        self.df = self.df_original[kept_snps]
-        self.df = np.c_[self.df, self.maf]
-        self.colnames = ["CHR", "SNP", "BP", "CM", "MAF"]
-
         return self
 
     def _filter_indivs(self, geno, keep_indivs, m, n):
@@ -329,10 +328,66 @@ class PlinkBEDFile:
         maf_values = np.minimum(self.all_snp_info['freq'], 1 - self.all_snp_info['freq'])
         maf_mask = (maf_values > mafMin) & self.all_snp_info['valid_snp']
 
-        # Get SNP names from the SNP list
-        snp_pass_maf = self.snp_list.IDList.iloc[maf_mask]
+        # Get SNP names from the BIM dataframe
+        snp_pass_maf = self.bim_df.loc[maf_mask, 'SNP'].tolist()
 
-        return snp_pass_maf.SNP.to_list()
+        return snp_pass_maf
+
+    def get_ldscore(self, annot_matrix=None, ld_wind=1.0, ld_unit="CM", keep_snps_index=None):
+        """
+        Calculate LD scores using an annotation matrix.
+
+        Parameters
+        ----------
+        annot_matrix : np.ndarray, optional
+            Annotation matrix. If None, uses a matrix of all ones.
+        ld_wind : float, optional
+            LD window size, by default 1.0
+        ld_unit : str, optional
+            Unit for the LD window, by default "CM"
+        keep_snps_index : list[int], optional
+            Indices of SNPs to keep, by default None
+
+        Returns
+        -------
+        np.ndarray
+            Array with calculated LD scores
+        """
+        # Apply filters if needed
+        if keep_snps_index is not None:
+            original_kept_snps = self.kept_snps.copy()
+            self.apply_filters(keep_snps=keep_snps_index)
+
+        # Configure LD window based on specified unit
+        if ld_unit == "SNP":
+            max_dist = ld_wind
+            coords = np.array(range(self.m))
+        elif ld_unit == "KB":
+            max_dist = ld_wind * 1000
+            coords = np.array(self.bim_df.loc[self.kept_snps, 'BP'])
+        elif ld_unit == "CM":
+            max_dist = ld_wind
+            coords = np.array(self.bim_df.loc[self.kept_snps, 'CM'])
+            # Check if the CM is all 0
+            if np.all(coords == 0):
+                print("Warning: All CM values are 0. Using 1MB window size for LD score calculation.")
+                max_dist = 1_000_000
+                coords = np.array(self.bim_df.loc[self.kept_snps, 'BP'])
+        else:
+            raise ValueError(f"Invalid ld_wind_unit: {ld_unit}. Must be one of: SNP, KB, CM")
+
+        # Calculate blocks for LD computation
+        block_left = getBlockLefts(coords, max_dist)
+        assert block_left.sum() > 0, "Invalid window size, please check the ld_wind parameter."
+
+        # Calculate LD scores
+        ld_scores = self.ldScoreVarBlocks(block_left, 100, annot=annot_matrix)
+
+        # Restore original state if filters were applied
+        if keep_snps_index is not None:
+            self.apply_filters(keep_snps=original_kept_snps)
+
+        return ld_scores
 
     def restart(self):
         """
@@ -489,7 +544,7 @@ class PlinkBEDFile:
 
 def initialize_bed_file(bfile_chr_prefix):
     """
-    Initialize a PlinkBEDFile without applying any filters, but pre-calculating MAF info.
+    Initialize a PlinkBEDFile for the given prefix.
 
     Parameters
     ----------
@@ -498,56 +553,10 @@ def initialize_bed_file(bfile_chr_prefix):
 
     Returns
     -------
-    geno_array : PlinkBEDFile
-        Initialized PlinkBEDFile object
-    array_snps : IDContainer
-        Object containing SNP information
-    array_indivs : IDContainer
-        Object containing individual information
-    """
-    PlinkBIMFile = ID_List_Factory(
-        ["CHR", "SNP", "CM", "BP", "A1", "A2"], 1, ".bim", usecols=[0, 1, 2, 3, 4, 5]
-    )
-    PlinkFAMFile = ID_List_Factory(["IID"], 0, ".fam", usecols=[1])
-
-    # Load SNP info
-    snp_file = bfile_chr_prefix + ".bim"
-    array_snps = PlinkBIMFile(snp_file)
-
-    # Load individual info
-    ind_file = bfile_chr_prefix + ".fam"
-    array_indivs = PlinkFAMFile(ind_file)
-    n = len(array_indivs.IDList)
-
-    # Load genotype data without applying filters
-    array_file = bfile_chr_prefix + ".bed"
-    geno_array = PlinkBEDFile(array_file, n, array_snps)
-
-    return geno_array, array_snps, array_indivs
-
-
-def get_filtered_bed_file(bed_file, keep_snps=None, keep_indivs=None, mafMin=None):
-    """
-    Get a filtered PlinkBEDFile object by applying filters to an existing object.
-
-    Parameters
-    ----------
-    bed_file : PlinkBEDFile
-        An initialized PlinkBEDFile object
-    keep_snps : array-like, optional
-        Indices of SNPs to keep.
-    keep_indivs : array-like, optional
-        Indices of individuals to keep.
-    mafMin : float, optional
-        Minimum minor allele frequency.
-
-    Returns
-    -------
     PlinkBEDFile
-        Filtered PlinkBEDFile object
+        Initialized PlinkBEDFile object
     """
-    # Apply filters and return
-    return bed_file.apply_filters(keep_snps=keep_snps, keep_indivs=keep_indivs, mafMin=mafMin)
+    return PlinkBEDFile(bfile_chr_prefix)
 
 
 def load_bfile(bfile_chr_prefix, keep_snps=None, keep_indivs=None, mafMin=None):
@@ -576,11 +585,21 @@ def load_bfile(bfile_chr_prefix, keep_snps=None, keep_indivs=None, mafMin=None):
     geno_array : PlinkBEDFile
         Object containing filtered genotype data.
     """
-    # Initialize without filters
-    geno_array, array_snps, array_indivs = initialize_bed_file(bfile_chr_prefix)
+    # Initialize BED file
+    plink_bed = PlinkBEDFile(bfile_chr_prefix)
+
+    # Create lightweight objects for backward compatibility
+    class SimpleContainer:
+        def __init__(self, df, idlist=None):
+            self.df = df
+            self.IDList = idlist if idlist is not None else df
+
+    # Create array_snps and array_indivs
+    array_snps = SimpleContainer(plink_bed.bim_df, plink_bed.bim_df[['SNP']])
+    array_indivs = SimpleContainer(plink_bed.fam_df)
 
     # Apply filters if any are specified
     if keep_snps is not None or keep_indivs is not None or mafMin is not None:
-        geno_array.apply_filters(keep_snps=keep_snps, keep_indivs=keep_indivs, mafMin=mafMin)
+        plink_bed.apply_filters(keep_snps=keep_snps, keep_indivs=keep_indivs, mafMin=mafMin)
 
-    return array_snps, array_indivs, geno_array
+    return array_snps, array_indivs, plink_bed
