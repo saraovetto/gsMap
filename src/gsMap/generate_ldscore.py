@@ -111,6 +111,7 @@ def load_marker_score(mk_score_file: str) -> pd.DataFrame:
     mk_score = mk_score.astype(np.float32, copy=False)
     return mk_score
 
+
 def overlaps_gtf_bim(gtf_pr: pr.PyRanges, bim_pr: pr.PyRanges) -> pd.DataFrame:
     """
     Find overlaps between GTF and BIM data, and select nearest gene for each SNP.
@@ -160,7 +161,6 @@ class LDScoreCalculator:
 
         # Initialize enhancer data if provided
         self.enhancer_pr = self._initialize_enhancer() if config.enhancer_annotation_file else None
-
 
     def validate_config(self):
         """Validate configuration parameters."""
@@ -212,7 +212,6 @@ class LDScoreCalculator:
         # Convert to PyRanges
         return pr.PyRanges(enhancer_df.reset_index())
 
-
     def process_chromosome(self, chrom: int):
         """
         Process a single chromosome to calculate LD scores.
@@ -227,7 +226,8 @@ class LDScoreCalculator:
         # Initialize PlinkBEDFile once for this chromosome
         plink_bed = PlinkBEDFile(f"{self.config.bfile_root}.{chrom}")
         logger.info(
-            f"Loaded genotype data for chromosome {chrom} with {plink_bed.m} SNPs and {plink_bed.n} individuals")
+            f"Loaded genotype data for chromosome {chrom} with {plink_bed.m} SNPs and {plink_bed.n} individuals"
+        )
 
         # Get SNPs passing MAF filter using built-in method
         self.snp_pass_maf = plink_bed.get_snps_by_maf(0.05)
@@ -247,13 +247,13 @@ class LDScoreCalculator:
             ld_scores = plink_bed.get_ldscore(
                 annot_matrix=self.snp_gene_pair_dummy.values,
                 ld_wind=self.config.ld_wind,
-                ld_unit=self.config.ld_unit
+                ld_unit=self.config.ld_unit,
             )
 
             self.snp_gene_weight_matrix = pd.DataFrame(
                 ld_scores,
                 index=self.snp_gene_pair_dummy.index,
-                columns=self.snp_gene_pair_dummy.columns
+                columns=self.snp_gene_pair_dummy.columns,
             )
 
             # Apply SNP filter if needed
@@ -294,13 +294,17 @@ class LDScoreCalculator:
             Initialized PlinkBEDFile object
         """
         if not self.config.keep_snp_root:
-            logger.info(f"Skipping w_ld generation for chr{chrom} as keep_snp_root is not provided")
+            logger.info(
+                f"Skipping w_ld generation for chr{chrom} as keep_snp_root is not provided"
+            )
             return
 
         logger.info(f"Generating w_ld for chr{chrom}")
 
         # Get the indices of SNPs to keep based on the keep_snp
-        keep_snps_indices = plink_bed.bim_df[plink_bed.bim_df.SNP.isin(self.snp_name)].index.tolist()
+        keep_snps_indices = plink_bed.bim_df[
+            plink_bed.bim_df.SNP.isin(self.snp_name)
+        ].index.tolist()
 
         # Create a simple unit annotation (all ones) for the filtered SNPs
         unit_annotation = np.ones((len(keep_snps_indices), 1))
@@ -310,18 +314,20 @@ class LDScoreCalculator:
             annot_matrix=unit_annotation,
             ld_wind=self.config.ld_wind,
             ld_unit=self.config.ld_unit,
-            keep_snps_index=keep_snps_indices
+            keep_snps_index=keep_snps_indices,
         )
 
         # Create the w_ld DataFrame
         bim_subset = plink_bed.bim_df.loc[keep_snps_indices]
-        w_ld_df = pd.DataFrame({
-            "SNP": bim_subset.SNP,
-            "L2": w_ld_scores.flatten(),
-            "CHR": bim_subset.CHR,
-            "BP": bim_subset.BP,
-            "CM": bim_subset.CM
-        })
+        w_ld_df = pd.DataFrame(
+            {
+                "SNP": bim_subset.SNP,
+                "L2": w_ld_scores.flatten(),
+                "CHR": bim_subset.CHR,
+                "BP": bim_subset.BP,
+                "CM": bim_subset.CM,
+            }
+        )
 
         # Reorder columns
         w_ld_df = w_ld_df[["CHR", "SNP", "BP", "CM", "L2"]]
@@ -373,7 +379,9 @@ class LDScoreCalculator:
 
         # Verify file existence
         if not annot_file_path.exists():
-            raise FileNotFoundError(f"Additional baseline annotation file not found: {annot_file_path}")
+            raise FileNotFoundError(
+                f"Additional baseline annotation file not found: {annot_file_path}"
+            )
 
         # Load annotations
         additional_baseline_df = pd.read_csv(annot_file_path, sep="\t")
@@ -400,31 +408,33 @@ class LDScoreCalculator:
             additional_baseline_df = additional_baseline_df.reindex(self.snp_gene_pair_dummy.index)
 
         # Combine annotations into a single matrix
-        combined_annotations = pd.concat([self.snp_gene_pair_dummy, additional_baseline_df], axis=1)
+        combined_annotations = pd.concat(
+            [self.snp_gene_pair_dummy, additional_baseline_df], axis=1
+        )
 
         # Calculate LD scores
         ld_scores = plink_bed.get_ldscore(
             annot_matrix=combined_annotations.values,
             ld_wind=self.config.ld_wind,
-            ld_unit=self.config.ld_unit
+            ld_unit=self.config.ld_unit,
         )
 
         # Split results
-        total_cols = combined_annotations.shape[1]
+        # total_cols = combined_annotations.shape[1]
         gene_cols = self.snp_gene_pair_dummy.shape[1]
-        baseline_cols = additional_baseline_df.shape[1]
+        #         baseline_cols = additional_baseline_df.shape[1]
 
         # Create DataFrames with proper indices and columns
         self.snp_gene_weight_matrix = pd.DataFrame(
             ld_scores[:, :gene_cols],
             index=combined_annotations.index,
-            columns=self.snp_gene_pair_dummy.columns
+            columns=self.snp_gene_pair_dummy.columns,
         )
 
         additional_ldscore = pd.DataFrame(
             ld_scores[:, gene_cols:],
             index=combined_annotations.index,
-            columns=additional_baseline_df.columns
+            columns=additional_baseline_df.columns,
         )
 
         # Filter by keep_snp_mask if specified
@@ -435,7 +445,9 @@ class LDScoreCalculator:
         # Save additional baseline LD scores
         ld_score_file = f"{self.config.ldscore_save_dir}/additional_baseline/baseline.{chrom}.l2.ldscore.feather"
         m_file_path = f"{self.config.ldscore_save_dir}/additional_baseline/baseline.{chrom}.l2.M"
-        m_5_file_path = f"{self.config.ldscore_save_dir}/additional_baseline/baseline.{chrom}.l2.M_5_50"
+        m_5_file_path = (
+            f"{self.config.ldscore_save_dir}/additional_baseline/baseline.{chrom}.l2.M_5_50"
+        )
         Path(m_file_path).parent.mkdir(parents=True, exist_ok=True)
 
         # Save LD scores
@@ -493,12 +505,16 @@ class LDScoreCalculator:
         )
 
         # Define file paths
-        ld_score_file = f"{self.config.ldscore_save_dir}/baseline/baseline.{chrom}.l2.ldscore.feather"
+        ld_score_file = (
+            f"{self.config.ldscore_save_dir}/baseline/baseline.{chrom}.l2.ldscore.feather"
+        )
         m_file = f"{self.config.ldscore_save_dir}/baseline/baseline.{chrom}.l2.M"
         m_5_file = f"{self.config.ldscore_save_dir}/baseline/baseline.{chrom}.l2.M_5_50"
 
         # Calculate LD scores
-        ldscore_chunk = self._calculate_ldscore_from_weights(baseline_df, plink_bed, drop_dummy_na=False)
+        ldscore_chunk = self._calculate_ldscore_from_weights(
+            baseline_df, plink_bed, drop_dummy_na=False
+        )
 
         # Save LD scores and M values
         self._save_ldscore_to_feather(
@@ -544,16 +560,22 @@ class LDScoreCalculator:
         w_ld_values = ldscore_chunk[:, 0]
 
         # Create a DataFrame with SNP information from the BIM file
-        snp_indices = plink_bed.kept_snps if hasattr(plink_bed, 'kept_snps') else np.arange(len(self.snp_name))
+        snp_indices = (
+            plink_bed.kept_snps
+            if hasattr(plink_bed, "kept_snps")
+            else np.arange(len(self.snp_name))
+        )
         bim_subset = plink_bed.bim_df.iloc[snp_indices]
 
-        w_ld_df = pd.DataFrame({
-            "SNP": self.snp_name,
-            "L2": w_ld_values,
-            "CHR": bim_subset.CHR.values[:len(self.snp_name)],  # Ensure length matches
-            "BP": bim_subset.BP.values[:len(self.snp_name)],
-            "CM": bim_subset.CM.values[:len(self.snp_name)]
-        })
+        w_ld_df = pd.DataFrame(
+            {
+                "SNP": self.snp_name,
+                "L2": w_ld_values,
+                "CHR": bim_subset.CHR.values[: len(self.snp_name)],  # Ensure length matches
+                "BP": bim_subset.BP.values[: len(self.snp_name)],
+                "CM": bim_subset.CM.values[: len(self.snp_name)],
+            }
+        )
 
         # Reorder columns
         w_ld_df = w_ld_df[["CHR", "SNP", "BP", "CM", "L2"]]
@@ -579,13 +601,13 @@ class LDScoreCalculator:
         # Process in chunks
         chunk_index = 1
         for i in trange(
-                0,
-                mk_scores.shape[1],
-                self.config.spots_per_chunk,
-                desc=f"Calculating LD scores for chr{chrom}",
+            0,
+            mk_scores.shape[1],
+            self.config.spots_per_chunk,
+            desc=f"Calculating LD scores for chr{chrom}",
         ):
             # Get marker scores for current chunk
-            mk_score_chunk = mk_scores.iloc[:, i: i + self.config.spots_per_chunk]
+            mk_score_chunk = mk_scores.iloc[:, i : i + self.config.spots_per_chunk]
 
             # Define file paths
             sample_name = self.config.sample_name
@@ -621,7 +643,7 @@ class LDScoreCalculator:
             gc.collect()
 
     def _calculate_ldscore_from_weights(
-            self, marker_scores: pd.DataFrame, plink_bed, drop_dummy_na: bool = True
+        self, marker_scores: pd.DataFrame, plink_bed, drop_dummy_na: bool = True
     ) -> np.ndarray:
         """
         Calculate LD scores using SNP-gene weight matrix.
@@ -683,7 +705,6 @@ class LDScoreCalculator:
         )
         df.index.name = "SNP"
         df.reset_index().to_feather(save_file_name)
-
 
     def _calculate_and_save_m_values(
         self,

@@ -11,11 +11,12 @@ import logging
 import bitarray as ba
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 import pyranges as pr
+from tqdm import tqdm
 
 # Configure logger
 logger = logging.getLogger("plink_ldscore_tool")
+
 
 def getBlockLefts(coords, max_dist):
     """
@@ -81,13 +82,15 @@ class PlinkBEDFile:
         self.n_original = len(self.fam_df)
 
         # Read the bed file
-        (self.nru_original, self.geno_original) = self._read(f"{bfile_prefix}.bed", self.m_original, self.n_original)
+        (self.nru_original, self.geno_original) = self._read(
+            f"{bfile_prefix}.bed", self.m_original, self.n_original
+        )
 
         # Pre-calculate MAF for all SNPs
         self.all_snp_info = self._calculate_all_snp_info()
 
         # Filter out invalid SNPs
-        valid_mask = self.all_snp_info['valid_snp']
+        valid_mask = self.all_snp_info["valid_snp"]
         if num_invalid := np.sum(~valid_mask):
             logger.warning(f"Filtering out {num_invalid} bad quality SNPs")
 
@@ -100,7 +103,9 @@ class PlinkBEDFile:
         # Create new genotype data with only the valid SNPs
         new_geno = ba.bitarray()
         for j in self.kept_snps:
-            new_geno += self.geno_original[2 * self.nru_original * j: 2 * self.nru_original * (j + 1)]
+            new_geno += self.geno_original[
+                2 * self.nru_original * j : 2 * self.nru_original * (j + 1)
+            ]
 
         # Update original data to only include valid SNPs
         self.geno_original = new_geno
@@ -114,12 +119,12 @@ class PlinkBEDFile:
         self.geno = self.geno_original.copy()
 
         # Update frequency info based on valid SNPs
-        self.freq = self.all_snp_info['freq'][valid_mask]
+        self.freq = self.all_snp_info["freq"][valid_mask]
         self.maf = np.minimum(self.freq, 1 - self.freq)
         self.sqrtpq = np.sqrt(self.freq * (1 - self.freq))
 
         # Add MAF to the BIM dataframe
-        self.bim_df['MAF'] = self.maf
+        self.bim_df["MAF"] = self.maf
 
     @staticmethod
     def load_bim(bim_file):
@@ -137,16 +142,12 @@ class PlinkBEDFile:
             DataFrame containing BIM data
         """
         df = pd.read_csv(
-            bim_file,
-            sep="\t",
-            header=None,
-            names=["CHR", "SNP", "CM", "BP", "A1", "A2"]
+            bim_file, sep="\t", header=None, names=["CHR", "SNP", "CM", "BP", "A1", "A2"]
         )
         return df
 
     @staticmethod
     def convert_bim_to_pyrange(bim_df) -> pr.PyRanges:
-
         bim_pr = bim_df.copy()
         bim_pr.drop(columns=["MAF"], inplace=True)
         bim_pr.columns = ["Chromosome", "SNP", "CM", "Start", "A1", "A2"]
@@ -175,13 +176,7 @@ class PlinkBEDFile:
         pd.DataFrame
             DataFrame containing FAM data
         """
-        df = pd.read_csv(
-            fam_file,
-            sep=r"\s+",
-            header=None,
-            usecols=[1],
-            names=["IID"]
-        )
+        df = pd.read_csv(fam_file, sep=r"\s+", header=None, usecols=[1], names=["IID"])
         return df
 
     def _read(self, fname, m, n):
@@ -237,14 +232,14 @@ class PlinkBEDFile:
         geno = self.geno_original
 
         snp_info = {
-            'freq': np.zeros(m),  # Allele frequencies
-            'het_miss_count': np.zeros(m),  # Count of het or missing genotypes
-            'valid_snp': np.zeros(m, dtype=bool)  # Whether SNP passes basic criteria
+            "freq": np.zeros(m),  # Allele frequencies
+            "het_miss_count": np.zeros(m),  # Count of het or missing genotypes
+            "valid_snp": np.zeros(m, dtype=bool),  # Whether SNP passes basic criteria
         }
 
         # For each SNP, calculate statistics
         for j in range(m):
-            z = geno[2 * nru * j: 2 * nru * (j + 1)]
+            z = geno[2 * nru * j : 2 * nru * (j + 1)]
             A = z[0::2]
             a = A.count()
             B = z[1::2]
@@ -255,10 +250,9 @@ class PlinkBEDFile:
             f = major_ct / (2 * n_nomiss) if n_nomiss > 0 else 0
             het_miss_ct = a + b - 2 * c  # count of SNPs that are het or missing
 
-            snp_info['freq'][j] = f
-            snp_info['het_miss_count'][j] = het_miss_ct
-            snp_info['valid_snp'][j] = (het_miss_ct < n)  # Basic validity check
-
+            snp_info["freq"][j] = f
+            snp_info["het_miss_count"][j] = het_miss_ct
+            snp_info["valid_snp"][j] = het_miss_ct < n  # Basic validity check
 
         return snp_info
 
@@ -292,8 +286,8 @@ class PlinkBEDFile:
 
         # Apply MAF filter using pre-calculated values
         if mafMin is not None and mafMin > 0:
-            maf_values = np.minimum(self.all_snp_info['freq'], 1 - self.all_snp_info['freq'])
-            maf_mask = (maf_values > mafMin) & self.all_snp_info['valid_snp']
+            maf_values = np.minimum(self.all_snp_info["freq"], 1 - self.all_snp_info["freq"])
+            maf_mask = (maf_values > mafMin) & self.all_snp_info["valid_snp"]
             kept_snps = kept_snps[maf_mask]
             logger.info(f"After MAF filtering (>{mafMin}), {len(kept_snps)} SNPs remain")
 
@@ -312,7 +306,7 @@ class PlinkBEDFile:
             # Create new genotype data with only the kept SNPs
             new_geno = ba.bitarray()
             for j in kept_snps:
-                new_geno += self.geno_original[2 * self.nru * j: 2 * self.nru * (j + 1)]
+                new_geno += self.geno_original[2 * self.nru * j : 2 * self.nru * (j + 1)]
             self.geno = new_geno
             self.m = len(kept_snps)
 
@@ -333,7 +327,7 @@ class PlinkBEDFile:
 
         # Update kept_snps and other attributes
         self.kept_snps = kept_snps
-        self.freq = self.all_snp_info['freq'][kept_snps]
+        self.freq = self.all_snp_info["freq"][kept_snps]
         self.maf = np.minimum(self.freq, 1 - self.freq)
         self.sqrtpq = np.sqrt(self.freq * (1 - self.freq))
 
@@ -350,8 +344,8 @@ class PlinkBEDFile:
         z = ba.bitarray(m * 2 * nru_new, endian="little")
         z.setall(0)
         for e, i in enumerate(keep_indivs):
-            z[2 * e:: 2 * nru_new] = geno[2 * i:: 2 * nru]
-            z[2 * e + 1:: 2 * nru_new] = geno[2 * i + 1:: 2 * nru]
+            z[2 * e :: 2 * nru_new] = geno[2 * i :: 2 * nru]
+            z[2 * e + 1 :: 2 * nru_new] = geno[2 * i + 1 :: 2 * nru]
         self.nru = nru_new
         return (z, m, n_new)
 
@@ -370,11 +364,11 @@ class PlinkBEDFile:
             List of SNP IDs that pass the MAF threshold
         """
         # Use the pre-calculated MAF values
-        maf_values = np.minimum(self.all_snp_info['freq'], 1 - self.all_snp_info['freq'])
-        maf_mask = (maf_values > mafMin) & self.all_snp_info['valid_snp']
+        maf_values = np.minimum(self.all_snp_info["freq"], 1 - self.all_snp_info["freq"])
+        maf_mask = (maf_values > mafMin) & self.all_snp_info["valid_snp"]
 
         # Get SNP names from the BIM dataframe
-        snp_pass_maf = self.bim_df.loc[maf_mask, 'SNP'].tolist()
+        snp_pass_maf = self.bim_df.loc[maf_mask, "SNP"].tolist()
 
         return snp_pass_maf
 
@@ -409,15 +403,17 @@ class PlinkBEDFile:
             coords = np.array(range(self.m))
         elif ld_unit == "KB":
             max_dist = ld_wind * 1000
-            coords = np.array(self.bim_df.loc[self.kept_snps, 'BP'])
+            coords = np.array(self.bim_df.loc[self.kept_snps, "BP"])
         elif ld_unit == "CM":
             max_dist = ld_wind
-            coords = np.array(self.bim_df.loc[self.kept_snps, 'CM'])
+            coords = np.array(self.bim_df.loc[self.kept_snps, "CM"])
             # Check if the CM is all 0
             if np.all(coords == 0):
-                logger.warning("All CM values are 0. Using 1MB window size for LD score calculation.")
+                logger.warning(
+                    "All CM values are 0. Using 1MB window size for LD score calculation."
+                )
                 max_dist = 1_000_000
-                coords = np.array(self.bim_df.loc[self.kept_snps, 'BP'])
+                coords = np.array(self.bim_df.loc[self.kept_snps, "BP"])
         else:
             raise ValueError(f"Invalid ld_wind_unit: {ld_unit}. Must be one of: SNP, KB, CM")
 
@@ -459,10 +455,10 @@ class PlinkBEDFile:
         c = self._currentSNP
         n = self.n
         nru = self.nru
-        slice = self.geno[2 * c * nru: 2 * (c + b) * nru]
-        X = np.array(slice.decode(self._bedcode), dtype="float64").reshape((b, nru)).T
+        slice = self.geno[2 * c * nru : 2 * (c + b) * nru]
+        X = np.array(slice.decode(self._bedcode), dtype="float32").reshape((b, nru)).T
         X = X[0:n, :]
-        Y = np.zeros(X.shape)
+        Y = np.zeros(X.shape, dtype="float32")
 
         # Normalize the SNPs and impute the missing ones with the mean
         for j in range(0, b):
@@ -509,14 +505,15 @@ class PlinkBEDFile:
         block_sizes = np.array(np.arange(m) - block_left)
         block_sizes = np.ceil(block_sizes / c) * c
         if annot is None:
-            annot = np.ones((m, 1))
+            annot = np.ones((m, 1), dtype="float32")
         else:
+            annot = annot.astype("float32")  # Ensure annot is float32
             annot_m = annot.shape[0]
             if annot_m != self.m:
                 raise ValueError("Incorrect number of SNPs in annot")
 
         n_a = annot.shape[1]  # number of annotations
-        cor_sum = np.zeros((m, n_a))
+        cor_sum = np.zeros((m, n_a), dtype="float32")
         # b = index of first SNP for which SNP 0 is not included in LD Score
         b = np.nonzero(block_left > 0)
         if np.any(b):
@@ -529,17 +526,17 @@ class PlinkBEDFile:
             b = m
 
         l_A = 0  # l_A := index of leftmost SNP in matrix A
-        A = snp_getter(b)
-        rfuncAB = np.zeros((b, c))
-        rfuncBB = np.zeros((c, c))
+        A = snp_getter(b)  # This now returns float32 data
+        rfuncAB = np.zeros((b, c), dtype="float32")
+        rfuncBB = np.zeros((c, c), dtype="float32")
         # chunk inside of block
         for l_B in np.arange(0, b, c):  # l_B := index of leftmost SNP in matrix B
-            B = A[:, l_B: l_B + c]
+            B = A[:, l_B : l_B + c]
             # ld matrix
             np.dot(A.T, B / n, out=rfuncAB)
             # ld matrix square
             rfuncAB = func(rfuncAB)
-            cor_sum[l_A: l_A + b, :] += np.dot(rfuncAB, annot[l_B: l_B + c, :])
+            cor_sum[l_A : l_A + b, :] += np.dot(rfuncAB, annot[l_B : l_B + c, :])
 
         # chunk to right of block
         b0 = b
@@ -555,33 +552,33 @@ class PlinkBEDFile:
                 # block_size can't increase more than c
                 # block_size can't be less than c unless it is zero
                 # both of these things make sense
-                A = np.hstack((A[:, old_b - b + c: old_b], B))
+                A = np.hstack((A[:, old_b - b + c : old_b], B))
                 l_A += old_b - b + c
             elif l_B == b0 and b > 0:
-                A = A[:, b0 - b: b0]
+                A = A[:, b0 - b : b0]
                 l_A = b0 - b
             elif b == 0:  # no SNPs to left in window, e.g., after a sequence gap
                 A = np.array(()).reshape((n, 0))
                 l_A = l_B
             if l_B == md:
                 c = m - md
-                rfuncAB = np.zeros((b, c))
-                rfuncBB = np.zeros((c, c))
+                rfuncAB = np.zeros((b, c), dtype="float32")
+                rfuncBB = np.zeros((c, c), dtype="float32")
             if b != old_b:
-                rfuncAB = np.zeros((b, c))
+                rfuncAB = np.zeros((b, c), dtype="float32")
 
-            B = snp_getter(c)
-            p1 = np.all(annot[l_A: l_A + b, :] == 0)
-            p2 = np.all(annot[l_B: l_B + c, :] == 0)
+            B = snp_getter(c)  # This now returns float32 data
+            p1 = np.all(annot[l_A : l_A + b, :] == 0)
+            p2 = np.all(annot[l_B : l_B + c, :] == 0)
             if p1 and p2:
                 continue
 
             np.dot(A.T, B / n, out=rfuncAB)
             rfuncAB = func(rfuncAB)
-            cor_sum[l_A: l_A + b, :] += np.dot(rfuncAB, annot[l_B: l_B + c, :])
-            cor_sum[l_B: l_B + c, :] += np.dot(annot[l_A: l_A + b, :].T, rfuncAB).T
+            cor_sum[l_A : l_A + b, :] += np.dot(rfuncAB, annot[l_B : l_B + c, :])
+            cor_sum[l_B : l_B + c, :] += np.dot(annot[l_A : l_A + b, :].T, rfuncAB).T
             np.dot(B.T, B / n, out=rfuncBB)
             rfuncBB = func(rfuncBB)
-            cor_sum[l_B: l_B + c, :] += np.dot(rfuncBB, annot[l_B: l_B + c, :])
+            cor_sum[l_B : l_B + c, :] += np.dot(rfuncBB, annot[l_B : l_B + c, :])
 
         return cor_sum
