@@ -18,7 +18,7 @@ from scipy.sparse import csr_matrix
 from tqdm import trange
 
 from gsMap.config import GenerateLDScoreConfig
-from gsMap.utils.generate_r2_matrix import getBlockLefts, load_bfile, initialize_bed_file, PlinkBEDFile
+from gsMap.utils.generate_r2_matrix import PlinkBEDFile
 
 # Configure warning behavior more precisely
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
@@ -112,45 +112,6 @@ def load_marker_score(mk_score_file: str) -> pd.DataFrame:
     mk_score = mk_score.astype(np.float32, copy=False)
     return mk_score
 
-
-def load_bim(bfile_root: str, chrom: int) -> tuple[pd.DataFrame, pr.PyRanges]:
-    """
-    Load PLINK BIM file and convert to a PyRanges object.
-
-    Parameters
-    ----------
-    bfile_root : str
-        Root path for PLINK bfiles
-    chrom : int
-        Chromosome number
-
-    Returns
-    -------
-    tuple
-        A tuple containing (bim_df, bim_pr) where:
-        - bim_df is a pandas DataFrame with BIM data
-        - bim_pr is a PyRanges object with BIM data
-    """
-    bim_file = f"{bfile_root}.{chrom}.bim"
-    logger.info(f"Loading BIM file: {bim_file}")
-
-    bim = pd.read_csv(bim_file, sep="\t", header=None)
-    bim.columns = ["CHR", "SNP", "CM", "BP", "A1", "A2"]
-
-    # Convert to PyRanges
-    bim_pr = bim.copy()
-    bim_pr.columns = ["Chromosome", "SNP", "CM", "Start", "A1", "A2"]
-
-    # Adjust coordinates (BIM is 1-based, PyRanges uses 0-based)
-    bim_pr["End"] = bim_pr["Start"].copy()
-    bim_pr["Start"] = bim_pr["Start"] - 1
-
-    bim_pr = pr.PyRanges(bim_pr)
-    bim_pr.Chromosome = f"chr{chrom}"
-
-    return bim, bim_pr
-
-
 def overlaps_gtf_bim(gtf_pr: pr.PyRanges, bim_pr: pr.PyRanges) -> pd.DataFrame:
     """
     Find overlaps between GTF and BIM data, and select nearest gene for each SNP.
@@ -178,71 +139,6 @@ def overlaps_gtf_bim(gtf_pr: pr.PyRanges, bim_pr: pr.PyRanges) -> pd.DataFrame:
     nearest_genes = overlaps.loc[overlaps.groupby("SNP").Distance.idxmin()]
 
     return nearest_genes
-
-
-def filter_snps_by_keep_snp(bim_df: pd.DataFrame, keep_snp_file: str) -> pd.DataFrame:
-    """
-    Filter BIM DataFrame to keep only SNPs in a provided list.
-
-    Parameters
-    ----------
-    bim_df : pd.DataFrame
-        DataFrame with BIM data
-    keep_snp_file : str
-        Path to a file with SNP IDs to keep
-
-    Returns
-    -------
-    pd.DataFrame
-        Filtered BIM DataFrame
-    """
-    # Read SNPs to keep
-    keep_snp = pd.read_csv(keep_snp_file, header=None)[0].to_list()
-
-    # Filter the BIM DataFrame
-    filtered_bim_df = bim_df[bim_df["SNP"].isin(keep_snp)]
-
-    logger.info(f"Kept {len(filtered_bim_df)} SNPs out of {len(bim_df)} after filtering")
-
-    return filtered_bim_df
-
-
-def get_snp_counts(config: GenerateLDScoreConfig) -> dict:
-    """
-    Count SNPs per chromosome and calculate start positions for zarr arrays.
-
-    Parameters
-    ----------
-    config : GenerateLDScoreConfig
-        Configuration object
-
-    Returns
-    -------
-    dict
-        Dictionary with SNP counts and start positions
-    """
-    snp_counts = {}
-    total_snp = 0
-
-    for chrom in range(1, 23):
-        bim_df, _ = load_bim(config.bfile_root, chrom)
-
-        if config.keep_snp_root:
-            keep_snp_file = f"{config.keep_snp_root}.{chrom}.snp"
-            filtered_bim_df = filter_snps_by_keep_snp(bim_df, keep_snp_file)
-        else:
-            filtered_bim_df = bim_df
-
-        snp_counts[chrom] = filtered_bim_df.shape[0]
-        total_snp += snp_counts[chrom]
-
-    snp_counts["total"] = total_snp
-
-    # Calculate cumulative SNP counts for zarr array indexing
-    chrom_snp_length_array = np.array([snp_counts[chrom] for chrom in range(1, 23)]).cumsum()
-    snp_counts["chrom_snp_start_point"] = [0] + chrom_snp_length_array.tolist()
-
-    return snp_counts
 
 
 class LDScoreCalculator:
@@ -367,7 +263,7 @@ class LDScoreCalculator:
         logger.info(f"Found {len(self.snp_pass_maf)} SNPs with MAF > 0.05")
 
         # Get SNP-gene dummy pairs
-        self.snp_gene_pair_dummy = self._get_snp_gene_dummy(chrom)
+        self.snp_gene_pair_dummy = self._get_snp_gene_dummy(chrom, plink_bed)
 
         # Apply SNP filter if provided
         self._apply_snp_filter(chrom)
@@ -898,7 +794,7 @@ class LDScoreCalculator:
         np.savetxt(m_file_path, m_values, delimiter="\t")
         np.savetxt(m_5_file_path, m_5_values, delimiter="\t")
 
-    def _get_snp_gene_dummy(self, chrom: int) -> pd.DataFrame:
+    def _get_snp_gene_dummy(self, chrom: int, plink_bed) -> pd.DataFrame:
         """
         Get dummy matrix for SNP-gene pairs.
 
@@ -906,6 +802,7 @@ class LDScoreCalculator:
         ----------
         chrom : int
             Chromosome number
+        plink_bed : PlinkBEDFile
 
         Returns
         -------
@@ -915,7 +812,8 @@ class LDScoreCalculator:
         logger.info(f"Creating SNP-gene mappings for chromosome {chrom}")
 
         # Load BIM file
-        bim, bim_pr = load_bim(self.config.bfile_root, chrom)
+        bim = plink_bed.bim_df
+        bim_pr = plink_bed.convert_bim_to_pyrange(bim)
 
         # Determine mapping strategy
         if self.config.gene_window_enhancer_priority in ["gene_window_first", "enhancer_first"]:

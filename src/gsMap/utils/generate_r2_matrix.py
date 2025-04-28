@@ -1,8 +1,11 @@
+import logging
+
 import bitarray as ba
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-
+import pyranges as pr
+logger = logging.getLogger(__name__)
 
 def getBlockLefts(coords, max_dist):
     """
@@ -70,6 +73,29 @@ class PlinkBEDFile:
         # Read the bed file
         (self.nru_original, self.geno_original) = self._read(f"{bfile_prefix}.bed", self.m_original, self.n_original)
 
+        # Pre-calculate MAF for all SNPs
+        self.all_snp_info = self._calculate_all_snp_info()
+
+        # Filter out invalid SNPs immediately
+        valid_mask = self.all_snp_info['valid_snp']
+        if num_invalid := np.sum(~valid_mask):
+            print(f"Filtering out {num_invalid} bad quality SNPs")
+
+        # Only keep valid SNPs
+        self.kept_snps = np.arange(self.m_original)[valid_mask]
+
+        # Update bim_df to only include valid SNPs and reset index
+        self.bim_df = self.bim_df.loc[valid_mask].reset_index(drop=True)
+
+        # Create new genotype data with only the valid SNPs
+        new_geno = ba.bitarray()
+        for j in self.kept_snps:
+            new_geno += self.geno_original[2 * self.nru_original * j: 2 * self.nru_original * (j + 1)]
+
+        # Update original data to only include valid SNPs
+        self.geno_original = new_geno
+        self.m_original = len(self.kept_snps)
+
         # Initialize current state variables
         self._currentSNP = 0
         self.m = self.m_original
@@ -77,12 +103,8 @@ class PlinkBEDFile:
         self.nru = self.nru_original
         self.geno = self.geno_original.copy()
 
-        # Pre-calculate MAF for all SNPs
-        self.all_snp_info = self._calculate_all_snp_info()
-
-        # Initialize as unfiltered
-        self.kept_snps = np.arange(self.m_original)
-        self.freq = self.all_snp_info['freq']
+        # Update frequency info based on valid SNPs
+        self.freq = self.all_snp_info['freq'][valid_mask]
         self.maf = np.minimum(self.freq, 1 - self.freq)
         self.sqrtpq = np.sqrt(self.freq * (1 - self.freq))
 
@@ -111,6 +133,22 @@ class PlinkBEDFile:
             names=["CHR", "SNP", "CM", "BP", "A1", "A2"]
         )
         return df
+
+    @staticmethod
+    def convert_bim_to_pyrange(bim_df) -> pr.PyRanges:
+
+        bim_pr = bim_df.copy()
+        bim_pr.drop(columns=["MAF"], inplace=True)
+        bim_pr.columns = ["Chromosome", "SNP", "CM", "Start", "A1", "A2"]
+        bim_pr.Chromosome = "chr" + bim_pr["Chromosome"].astype(str)
+
+        # Adjust coordinates (BIM is 1-based, PyRanges uses 0-based)
+        bim_pr["End"] = bim_pr["Start"].copy()
+        bim_pr["Start"] = bim_pr["Start"] - 1
+
+        bim_pr = pr.PyRanges(bim_pr)
+
+        return bim_pr
 
     @staticmethod
     def load_fam(fam_file):
@@ -540,66 +578,3 @@ class PlinkBEDFile:
             cor_sum[l_B: l_B + c, :] += np.dot(rfuncBB, annot[l_B: l_B + c, :])
 
         return cor_sum
-
-
-def initialize_bed_file(bfile_chr_prefix):
-    """
-    Initialize a PlinkBEDFile for the given prefix.
-
-    Parameters
-    ----------
-    bfile_chr_prefix : str
-        Prefix of the PLINK binary file.
-
-    Returns
-    -------
-    PlinkBEDFile
-        Initialized PlinkBEDFile object
-    """
-    return PlinkBEDFile(bfile_chr_prefix)
-
-
-def load_bfile(bfile_chr_prefix, keep_snps=None, keep_indivs=None, mafMin=None):
-    """
-    Load a binary PLINK file with optional filtering.
-
-    This version maintains backward compatibility with the original function.
-
-    Parameters
-    ----------
-    bfile_chr_prefix : str
-        Prefix of the PLINK binary file.
-    keep_snps : array-like, optional
-        Indices of SNPs to keep.
-    keep_indivs : array-like, optional
-        Indices of individuals to keep.
-    mafMin : float, optional
-        Minimum minor allele frequency.
-
-    Returns
-    -------
-    array_snps : IDContainer
-        Object containing SNP information.
-    array_indivs : IDContainer
-        Object containing individual information.
-    geno_array : PlinkBEDFile
-        Object containing filtered genotype data.
-    """
-    # Initialize BED file
-    plink_bed = PlinkBEDFile(bfile_chr_prefix)
-
-    # Create lightweight objects for backward compatibility
-    class SimpleContainer:
-        def __init__(self, df, idlist=None):
-            self.df = df
-            self.IDList = idlist if idlist is not None else df
-
-    # Create array_snps and array_indivs
-    array_snps = SimpleContainer(plink_bed.bim_df, plink_bed.bim_df[['SNP']])
-    array_indivs = SimpleContainer(plink_bed.fam_df)
-
-    # Apply filters if any are specified
-    if keep_snps is not None or keep_indivs is not None or mafMin is not None:
-        plink_bed.apply_filters(keep_snps=keep_snps, keep_indivs=keep_indivs, mafMin=mafMin)
-
-    return array_snps, array_indivs, plink_bed
