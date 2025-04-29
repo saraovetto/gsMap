@@ -9,6 +9,7 @@ from scipy.stats import norm
 
 from gsMap.config import DiagnosisConfig
 from gsMap.utils.manhattan_plot import ManhattanPlot
+from gsMap.utils.regression_read import _read_chr_files
 from gsMap.visualize import draw_scatter, estimate_point_size_for_plot, load_ldsc, load_st_coord
 
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -100,10 +101,11 @@ def load_gwas_data(config: DiagnosisConfig):
 def load_snp_gene_pairs(config: DiagnosisConfig):
     """Load SNP-gene pairs from multiple chromosomes."""
     ldscore_save_dir = Path(config.ldscore_save_dir)
+    snp_gene_pair_file_prefix = ldscore_save_dir / "SNP_gene_pair/SNP_gene_pair_chr"
     return pd.concat(
         [
-            pd.read_feather(ldscore_save_dir / f"SNP_gene_pair/SNP_gene_pair_chr{chrom}.feather")
-            for chrom in range(1, 23)
+            pd.read_feather(file)
+            for file in _read_chr_files(snp_gene_pair_file_prefix.as_posix(), suffix=".feather")
         ]
     )
 
@@ -168,7 +170,6 @@ def generate_manhattan_plot(config: DiagnosisConfig):
 
     # Log some diagnostic information
     logger.info(f"Creating Manhattan plot with {len(gwas_data_to_plot)} SNPs")
-    logger.info(f"Columns available: {list(gwas_data_to_plot.columns)}")
     logger.info(f"Chromosome column values: {gwas_data_to_plot['CHR'].unique()}")
 
     fig = ManhattanPlot(
