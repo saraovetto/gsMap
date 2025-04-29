@@ -15,7 +15,7 @@ import pyranges as pr
 from tqdm import tqdm
 
 # Configure logger
-logger = logging.getLogger("plink_ldscore_tool")
+logger = logging.getLogger("gsMap.utils.plink_ldscore_tool")
 
 
 def getBlockLefts(coords, max_dist):
@@ -82,17 +82,21 @@ class PlinkBEDFile:
         self.n_original = len(self.fam_df)
 
         # Read the bed file
+        logger.info(f"Loading Plink genotype data from {bfile_prefix}.bed")
         (self.nru_original, self.geno_original) = self._read(
             f"{bfile_prefix}.bed", self.m_original, self.n_original
         )
 
         # Pre-calculate MAF for all SNPs
+        logger.info("Calculating MAF and QC for all SNPs")
         self.all_snp_info = self._calculate_all_snp_info()
 
         # Filter out invalid SNPs
         valid_mask = self.all_snp_info["valid_snp"]
         if num_invalid := np.sum(~valid_mask):
             logger.warning(f"Filtering out {num_invalid} bad quality SNPs")
+        else:
+            logger.info("All SNPs passed the basic quality check")
 
         # Only keep valid SNPs
         self.kept_snps = np.arange(self.m_original)[valid_mask]
@@ -125,6 +129,8 @@ class PlinkBEDFile:
 
         # Add MAF to the BIM dataframe
         self.bim_df["MAF"] = self.maf
+
+        logger.info(f"Loaded genotype data with {self.m} SNPs and {self.n} individuals")
 
     @staticmethod
     def load_bim(bim_file):
@@ -369,6 +375,8 @@ class PlinkBEDFile:
 
         # Get SNP names from the BIM dataframe
         snp_pass_maf = self.bim_df.loc[maf_mask, "SNP"].tolist()
+
+        logger.info(f"{len(snp_pass_maf)} SNPs with MAF > f{mafMin}")
 
         return snp_pass_maf
 

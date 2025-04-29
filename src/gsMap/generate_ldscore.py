@@ -225,13 +225,9 @@ class LDScoreCalculator:
 
         # Initialize PlinkBEDFile once for this chromosome
         plink_bed = PlinkBEDFile(f"{self.config.bfile_root}.{chrom}")
-        logger.info(
-            f"Loaded genotype data for chromosome {chrom} with {plink_bed.m} SNPs and {plink_bed.n} individuals"
-        )
 
         # Get SNPs passing MAF filter using built-in method
         self.snp_pass_maf = plink_bed.get_snps_by_maf(0.05)
-        logger.info(f"Found {len(self.snp_pass_maf)} SNPs with MAF > 0.05")
 
         # Get SNP-gene dummy pairs
         self.snp_gene_pair_dummy = self._get_snp_gene_dummy(chrom, plink_bed)
