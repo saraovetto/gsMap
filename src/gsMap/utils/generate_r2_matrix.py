@@ -292,8 +292,8 @@ class PlinkBEDFile:
 
         # Apply MAF filter using pre-calculated values
         if mafMin is not None and mafMin > 0:
-            maf_values = np.minimum(self.all_snp_info["freq"], 1 - self.all_snp_info["freq"])
-            maf_mask = (maf_values > mafMin) & self.all_snp_info["valid_snp"]
+            # Remove the redundant valid_snp check since all SNPs are already valid
+            maf_mask = self.maf > mafMin
             kept_snps = kept_snps[maf_mask]
             logger.info(f"After MAF filtering (>{mafMin}), {len(kept_snps)} SNPs remain")
 
@@ -369,9 +369,7 @@ class PlinkBEDFile:
         list
             List of SNP IDs that pass the MAF threshold
         """
-        # Use the pre-calculated MAF values
-        maf_values = np.minimum(self.all_snp_info["freq"], 1 - self.all_snp_info["freq"])
-        maf_mask = (maf_values > mafMin) & self.all_snp_info["valid_snp"]
+        maf_mask = self.maf > mafMin
 
         # Get SNP names from the BIM dataframe
         snp_pass_maf = self.bim_df.loc[maf_mask, "SNP"].tolist()
