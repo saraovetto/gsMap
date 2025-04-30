@@ -94,26 +94,26 @@ class PlinkBEDFile:
         # Filter out invalid SNPs
         valid_mask = self.all_snp_info["valid_snp"]
         if num_invalid := np.sum(~valid_mask):
-            logger.warning(f"Filtering out {num_invalid} bad quality SNPs")
+            logger.warning(
+                f"Filtering out {num_invalid} bad quality SNPs: {self.bim_df.loc[~valid_mask, 'SNP'].tolist()}"
+            )
         else:
             logger.info("All SNPs passed the basic quality check")
 
-        # Only keep valid SNPs
-        self.kept_snps = np.arange(self.m_original)[valid_mask]
-
-        # Update bim_df to only include valid SNPs and reset index
-        self.bim_df = self.bim_df.loc[valid_mask].reset_index(drop=True)
-
         # Create new genotype data with only the valid SNPs
         new_geno = ba.bitarray()
-        for j in self.kept_snps:
+        for j in np.arange(self.m_original)[valid_mask]:
             new_geno += self.geno_original[
                 2 * self.nru_original * j : 2 * self.nru_original * (j + 1)
             ]
 
         # Update original data to only include valid SNPs
         self.geno_original = new_geno
-        self.m_original = len(self.kept_snps)
+
+        # Only keep valid SNPs
+        self.bim_df = self.bim_df.loc[valid_mask].reset_index(drop=True)
+        self.m_original = len(self.bim_df)
+        self.kept_snps = np.arange(self.m_original)
 
         # Initialize current state variables
         self._currentSNP = 0
