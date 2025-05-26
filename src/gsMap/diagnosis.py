@@ -1,5 +1,7 @@
+import os
 import logging
 import warnings
+import multiprocessing
 from pathlib import Path
 
 import numpy as np
@@ -221,24 +223,33 @@ def generate_GSS_distribution(config: DiagnosisConfig):
     # save plot gene list
     config.get_GSS_plot_select_gene_file(config.trait_name).write_text("\n".join(plot_genes))
 
+    paralleized_params = []
     for selected_gene in plot_genes:
         expression_series = pd.Series(
             adata[:, selected_gene].X.toarray().flatten(), index=adata.obs.index, name="Expression"
         )
         threshold = np.quantile(expression_series, 0.9999)
         expression_series[expression_series > threshold] = threshold
-        generate_and_save_plots(
-            adata,
-            mk_score,
-            expression_series,
-            selected_gene,
-            point_size,
-            pixel_width,
-            pixel_height,
-            sub_fig_save_dir,
-            config.sample_name,
-            config.annotation,
+
+        paralleized_params.append(
+            (
+                adata,
+                mk_score,
+                expression_series,
+                selected_gene,
+                point_size,
+                pixel_width,
+                pixel_height,
+                sub_fig_save_dir,
+                config.sample_name,
+                config.annotation,
+            )
         )
+
+    with multiprocessing.Pool(os.cpu_count() // 2) as pool:
+        pool.starmap(generate_and_save_plots, paralleized_params)
+        pool.close()
+        pool.join()
 
 
 def generate_and_save_plots(
