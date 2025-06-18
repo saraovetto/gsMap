@@ -8,16 +8,15 @@ https://github.com/bulik/ldsc/blob/master/ldsc/ldscore.py
 
 import logging
 
-import torch
-import numba
 import bitarray as ba
+import numba
 import numpy as np
 import pandas as pd
 import pyranges as pr
+import torch
 from tqdm import tqdm
 
 from gsMap.utils.torch_utils import torch_device, torch_sync
-
 
 # Configure logger
 logger = logging.getLogger("gsMap.utils.plink_ldscore_tool")
