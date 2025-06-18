@@ -39,7 +39,8 @@ dependencies = [
     'zarr>=2,<3',
     'bitarray >=2.9.2, <3.0.0',
     'pyarrow',
-    'scikit-misc'
+    'scikit-misc',
+    'numba'
 ]
 
 [project.optional-dependencies]
