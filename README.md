@@ -23,7 +23,7 @@ in a spatially resolved manner.
 
 ![Model Architecture](schematic.png)
 
-## Installation
+## 🛠️ Installation
 
 Install using pip:
 
@@ -55,22 +55,25 @@ Verify the installation by running the following command:
 gsmap --help
 ```
 
-## Usage
+## 📘 Usage
 
 Please check out the documentation and tutorials at [gsMap Documentation](https://yanglab.westlake.edu.cn/gsmap/document/software).
 
-## Online Visualization
+## 🌐 Online Visualization
 
 To visualize the traits-cell association spatial maps,
 please refer to [gsMap Visualization](https://yanglab.westlake.edu.cn/gsmap/visualize).
 
-## Citation
+## 📖 Citation
 
 Song, L., Chen, W., Hou, J., Guo, M. & Yang, J.
 [Spatially resolved mapping of cells associated with human complex traits.](https://doi.org/10.1038/s41586-025-08757-x)
 Nature (2025).
 
 Please cite the paper and give us a STAR if you find gsMap useful for your research.
+
+## ✨ Research Highlight
+gsMap was recently highlighted in [Nature Methods](https://www.nature.com/articles/s41592-025-02711-5).
 
 <!-- Badge links -->
 
