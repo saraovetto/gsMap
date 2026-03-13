@@ -1,0 +1,16 @@
+[project]
+name = "gsmap-mcp"
+version = "0.1.0"
+description = "MCP server for running gsMap spatial GWAS analysis"
+dependencies = [
+    "mcp",
+    "requests",
+    "beautifulsoup4"
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["gsmap_mcp"]
