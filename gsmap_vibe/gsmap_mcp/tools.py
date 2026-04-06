@@ -1,8 +1,7 @@
 import subprocess
-import urllib.request
 import tarfile
+import urllib.request
 from pathlib import Path
-
 
 GSMAP_RESOURCE_URL = "https://yanglab.westlake.edu.cn/data/gsMap/gsMap_resource.tar.gz"
 GSMAP_EXAMPLE_URL = "https://yanglab.westlake.edu.cn/data/gsMap/Visium_example_data.tar.gz"
@@ -10,11 +9,7 @@ GSMAP_EXAMPLE_URL = "https://yanglab.westlake.edu.cn/data/gsMap/Visium_example_d
 
 def run_command(cmd):
 
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True
-    )
+    result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
         raise RuntimeError(result.stderr)
@@ -66,8 +61,10 @@ def format_sumstats(sumstats, out, args):
     cmd = [
         "gsmap",
         "format_sumstats",
-        "--sumstats", sumstats,
-        "--out", out,
+        "--sumstats",
+        sumstats,
+        "--out",
+        out,
     ]
 
     cmd.extend(args)
@@ -82,10 +79,14 @@ def run_quick_mode(workdir, hdf5_path, sumstats_file, trait_name, args):
     cmd = [
         "gsmap",
         "quick_mode",
-        "--workdir", workdir,
-        "--hdf5_path", hdf5_path,
-        "--sumstats_file", sumstats_file,
-        "--trait_name", trait_name,
+        "--workdir",
+        workdir,
+        "--hdf5_path",
+        hdf5_path,
+        "--sumstats_file",
+        sumstats_file,
+        "--trait_name",
+        trait_name,
     ]
 
     cmd.extend(args)
@@ -100,9 +101,12 @@ def find_latent_representation(workdir, sample_name, hdf5_path, args):
     cmd = [
         "gsmap",
         "run_find_latent_representations",
-        "--workdir", workdir,
-        "--sample_name", sample_name,
-        "--input_hdf5_path", hdf5_path,
+        "--workdir",
+        workdir,
+        "--sample_name",
+        sample_name,
+        "--input_hdf5_path",
+        hdf5_path,
     ]
 
     cmd.extend(args)
@@ -117,9 +121,12 @@ def latent_to_gene(workdir, sample_name, hdf5_path, args):
     cmd = [
         "gsmap",
         "run_latent_to_gene",
-        "--workdir", workdir,
-        "--sample_name", sample_name,
-        "--input_hdf5_path", hdf5_path,
+        "--workdir",
+        workdir,
+        "--sample_name",
+        sample_name,
+        "--input_hdf5_path",
+        hdf5_path,
     ]
 
     cmd.extend(args)
@@ -134,9 +141,12 @@ def generate_ldscore(workdir, sample_name, chromosome, args):
     cmd = [
         "gsmap",
         "run_generate_ldscore",
-        "--workdir", workdir,
-        "--sample_name", sample_name,
-        "--chrom", str(chromosome),
+        "--workdir",
+        workdir,
+        "--sample_name",
+        sample_name,
+        "--chrom",
+        str(chromosome),
     ]
 
     cmd.extend(args)
@@ -151,10 +161,14 @@ def spatial_ldsc(workdir, sample_name, sumstats_file, trait_name, args):
     cmd = [
         "gsmap",
         "run_spatial_ldsc",
-        "--workdir", workdir,
-        "--sample_name", sample_name,
-        "--sumstats_file", sumstats_file,
-        "--trait_name", trait_name,
+        "--workdir",
+        workdir,
+        "--sample_name",
+        sample_name,
+        "--sumstats_file",
+        sumstats_file,
+        "--trait_name",
+        trait_name,
     ]
 
     cmd.extend(args)

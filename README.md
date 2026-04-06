@@ -60,6 +60,7 @@ gsmap --help
 gsMap supports AI-assisted workflows that allow users to run spatial GWAS
 analysis using modern AI coding agents and Vibe coding environments.
 To add the gsMap MCP server and SKILLs in Claude Code:
+
 ```bash
 cd gsMap/gsmap_vibe
 uv pip install -e .
@@ -70,7 +71,6 @@ cp -r gsmap_skill ~/.claude/skills/
 ## 📘 Usage
 
 Please check out the documentation and tutorials at [gsMap Documentation](https://yanglab.westlake.edu.cn/gsmap/document/software).
-
 
 ## 🌐 Online Visualization
 

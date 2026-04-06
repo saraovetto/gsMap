@@ -5,7 +5,7 @@ by integrating spatial transcriptomics with GWAS summary statistics.
 
 Always prefer MCP tools instead of manually writing gsMap shell commands.
 
----
+______________________________________________________________________
 
 # WHEN TO USE THIS SKILL
 
@@ -25,7 +25,7 @@ Analyze spatial GWAS enrichment
 Perform spatial transcriptomics GWAS analysis
 Identify trait-relevant spatial regions
 
----
+______________________________________________________________________
 
 # DEFAULT WORKFLOW
 
@@ -36,14 +36,14 @@ gsmap_quick_mode
 This tool automatically runs the full gsMap pipeline:
 
 1. latent spatial representation learning
-2. gene spatial score calculation
-3. LD score generation
-4. spatial LDSC enrichment analysis
+1. gene spatial score calculation
+1. LD score generation
+1. spatial LDSC enrichment analysis
 
 Always prefer gsmap_quick_mode unless the user explicitly requests
 step-by-step control of the pipeline.
 
----
+______________________________________________________________________
 
 # STEP-BY-STEP PIPELINE TOOLS
 
@@ -53,9 +53,9 @@ of the gsMap pipeline.
 Pipeline order:
 
 1. gsmap_find_latent_representation
-2. gsmap_latent_to_gene
-3. gsmap_generate_ldscore
-4. gsmap_spatial_ldsc
+1. gsmap_latent_to_gene
+1. gsmap_generate_ldscore
+1. gsmap_spatial_ldsc
 
 Typical workflow:
 
@@ -64,7 +64,7 @@ latent representation
 → LD scores
 → spatial LDSC enrichment
 
----
+______________________________________________________________________
 
 # PASSING ADDITIONAL CLI PARAMETERS
 
@@ -76,18 +76,18 @@ pass them using the `args` parameter.
 Example:
 
 gsmap_find_latent_representation(
-  workdir="output",
-  sample_name="sample1",
-  hdf5_path="data.h5ad",
-  args=[
-    "--annotation","cell_type",
-    "--data_layer","count",
-    "--epochs","200",
-    "--n_neighbors","15"
-  ]
+workdir="output",
+sample_name="sample1",
+hdf5_path="data.h5ad",
+args=\[
+"--annotation","cell_type",
+"--data_layer","count",
+"--epochs","200",
+"--n_neighbors","15"
+\]
 )
 
----
+______________________________________________________________________
 
 # DATA REQUIREMENTS
 
@@ -106,7 +106,7 @@ If the user wants to run a demo analysis or view example inputs, use:
 
 download_example_dataset
 
----
+______________________________________________________________________
 
 # GWAS SUMMARY STATISTICS FORMAT
 
@@ -125,7 +125,7 @@ gsmap_format_sumstats
 
 Additional column mappings can be passed using `args`.
 
----
+______________________________________________________________________
 
 # DOCUMENTATION LOOKUP
 

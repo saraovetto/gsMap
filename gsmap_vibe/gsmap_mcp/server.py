@@ -1,6 +1,7 @@
 from mcp.server.fastmcp import FastMCP
-from .tools import *
+
 from .docs import search_docs
+from .tools import *
 
 mcp = FastMCP("gsmap")
 
@@ -58,11 +59,7 @@ def download_example_dataset(output_dir: str):
 
 
 @mcp.tool()
-def gsmap_format_sumstats(
-    sumstats: str,
-    out: str,
-    args: list[str] = []
-):
+def gsmap_format_sumstats(sumstats: str, out: str, args: list[str] = []):
     """
     Convert GWAS summary statistics into gsMap-compatible format.
 
@@ -107,11 +104,7 @@ def gsmap_format_sumstats(
 
 @mcp.tool()
 def gsmap_quick_mode(
-    workdir: str,
-    hdf5_path: str,
-    sumstats_file: str,
-    trait_name: str,
-    args: list[str] = []
+    workdir: str, hdf5_path: str, sumstats_file: str, trait_name: str, args: list[str] = []
 ):
     """
     Run the gsMap quick_mode pipeline.
@@ -151,21 +144,12 @@ def gsmap_quick_mode(
 
     Use this tool for most spatial GWAS analyses.
     """
-    return run_quick_mode(
-        workdir,
-        hdf5_path,
-        sumstats_file,
-        trait_name,
-        args
-    )
+    return run_quick_mode(workdir, hdf5_path, sumstats_file, trait_name, args)
 
 
 @mcp.tool()
 def gsmap_find_latent_representation(
-    workdir: str,
-    sample_name: str,
-    hdf5_path: str,
-    args: list[str] = []
+    workdir: str, sample_name: str, hdf5_path: str, args: list[str] = []
 ):
     """
     Step 1 of the gsMap step-by-step pipeline.
@@ -188,21 +172,11 @@ def gsmap_find_latent_representation(
         Optional additional CLI parameters for the latent
         representation learning step.
     """
-    return find_latent_representation(
-        workdir,
-        sample_name,
-        hdf5_path,
-        args
-    )
+    return find_latent_representation(workdir, sample_name, hdf5_path, args)
 
 
 @mcp.tool()
-def gsmap_latent_to_gene(
-    workdir: str,
-    sample_name: str,
-    hdf5_path: str,
-    args: list[str] = []
-):
+def gsmap_latent_to_gene(workdir: str, sample_name: str, hdf5_path: str, args: list[str] = []):
     """
     Step 2 of the gsMap step-by-step pipeline.
 
@@ -223,21 +197,11 @@ def gsmap_latent_to_gene(
     args : list[str]
         Optional additional CLI flags.
     """
-    return latent_to_gene(
-        workdir,
-        sample_name,
-        hdf5_path,
-        args
-    )
+    return latent_to_gene(workdir, sample_name, hdf5_path, args)
 
 
 @mcp.tool()
-def gsmap_generate_ldscore(
-    workdir: str,
-    sample_name: str,
-    chromosome: int,
-    args: list[str] = []
-):
+def gsmap_generate_ldscore(workdir: str, sample_name: str, chromosome: int, args: list[str] = []):
     """
     Step 3 of the gsMap step-by-step pipeline.
 
@@ -257,21 +221,12 @@ def gsmap_generate_ldscore(
     args : list[str]
         Optional additional CLI flags.
     """
-    return generate_ldscore(
-        workdir,
-        sample_name,
-        chromosome,
-        args
-    )
+    return generate_ldscore(workdir, sample_name, chromosome, args)
 
 
 @mcp.tool()
 def gsmap_spatial_ldsc(
-    workdir: str,
-    sample_name: str,
-    sumstats_file: str,
-    trait_name: str,
-    args: list[str] = []
+    workdir: str, sample_name: str, sumstats_file: str, trait_name: str, args: list[str] = []
 ):
     """
     Step 4 of the gsMap step-by-step pipeline.
@@ -296,13 +251,7 @@ def gsmap_spatial_ldsc(
     args : list[str]
         Optional additional CLI parameters.
     """
-    return spatial_ldsc(
-        workdir,
-        sample_name,
-        sumstats_file,
-        trait_name,
-        args
-    )
+    return spatial_ldsc(workdir, sample_name, sumstats_file, trait_name, args)
 
 
 @mcp.tool()

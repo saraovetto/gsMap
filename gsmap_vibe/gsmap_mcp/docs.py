@@ -13,7 +13,6 @@ def search_docs(query: str):
     results = []
 
     for line in text.splitlines():
-
         if query.lower() in line.lower():
             results.append(line.strip())
 
